@@ -46,7 +46,6 @@ final class CuriusFeedStore {
 struct CuriusFeedView: View {
     @Bindable var store: CuriusFeedStore
     @Environment(\.openURL) private var openURL
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
         ScrollView {
@@ -64,7 +63,7 @@ struct CuriusFeedView: View {
                     VStack(alignment: .leading, spacing: 5) {
                         if index == 0 || store.items[index - 1].day != item.day {
                             Text(item.day)
-                                .font(.system(.caption, design: .monospaced))
+                                .font(.system(.caption2, design: .monospaced))
                                 .foregroundStyle(.tertiary).padding(.top, index == 0 ? 0 : 12)
                         }
                         HStack(alignment: .top, spacing: 4) {
@@ -73,9 +72,9 @@ struct CuriusFeedView: View {
                             } label: {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(item.title.isEmpty ? item.url : item.title)
-                                        .font(.system(horizontalSizeClass == .regular ? .body : .subheadline, design: .monospaced)).lineLimit(3)
-                                        .foregroundStyle(Color.paperyInk)
-                                    Text(item.metadata).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
+                                        .font(.system(.caption, design: .monospaced)).lineLimit(3)
+                                        .foregroundStyle(.secondary)
+                                    Text(item.metadata).font(.system(.caption2, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .contentShape(Rectangle())
