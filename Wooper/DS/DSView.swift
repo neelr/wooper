@@ -8,7 +8,8 @@ struct DSView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var importing = false
     @State private var about = false
-    private let shell = Color(white: 0.14)
+    private let shell = Color(red: 0.62, green: 0.83, blue: 0.90)
+    private let controlInk = Color(red: 0.19, green: 0.39, blue: 0.46)
 
     var body: some View {
         NavigationStack {
@@ -46,7 +47,7 @@ struct DSView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 16) {
                             Text("Powered by melonDS").font(.title2)
-                            Text("Import .nds files from Files. ROMs, in-game saves and save states stay in wooper/DS on this phone. The Mic button generates microphone noise. DS multiplayer, DSi and physical controllers aren't supported yet.")
+                            Text("Import .nds files from Files. ROMs, in-game saves and save states stay in wooper/DS on this phone. DS multiplayer, DSi and physical controllers aren't supported yet.")
                             Link("melonDS source and license", destination: URL(string: "https://github.com/libretro/melonds")!)
                             Text(Bundle.main.url(forResource: "MelonDS-License", withExtension: "txt").flatMap { try? String(contentsOf: $0) } ?? "GNU General Public License v3")
                                 .font(.caption.monospaced())
@@ -99,14 +100,14 @@ struct DSView: View {
             Button("Back to library") { model.close() }
         } label: {
             Image(systemName: "ellipsis").font(.system(size: 18, weight: .bold))
-                .foregroundStyle(.white.opacity(0.5)).frame(width: 44, height: 44)
+                .foregroundStyle(controlInk.opacity(0.7)).frame(width: 44, height: 44)
         }.disabled(model.busy)
     }
 
     private var speaker: some View {
         VStack(spacing: 5) {
             ForEach(0..<6) { _ in
-                Capsule().fill(.black.opacity(0.65)).frame(width: 18, height: 3)
+                Capsule().fill(controlInk.opacity(0.6)).frame(width: 18, height: 3)
             }
         }.accessibilityHidden(true)
     }
@@ -117,27 +118,17 @@ struct DSView: View {
                 HStack {
                     pad("L", 10)
                     Spacer()
-                    Capsule().fill(.black.opacity(0.45)).frame(width: 80, height: 5)
+                    Capsule().fill(controlInk.opacity(0.25)).frame(width: 80, height: 5)
                     Spacer()
                     pad("R", 11)
                 }
                 HStack(spacing: 8) {
-                    VStack(spacing: 0) {
-                        pad("↑", 4)
-                        HStack(spacing: 0) { pad("←", 6); pad("→", 7) }
-                        pad("↓", 5)
-                    }.frame(width: 88)
+                    controlDiamond(top: ("↑", 4), left: ("←", 6), right: ("→", 7), bottom: ("↓", 5))
                     display(image: image, touch: true)
-                    VStack(spacing: 0) {
-                        pad("X", 9)
-                        HStack(spacing: 0) { pad("Y", 1); pad("A", 8) }
-                        pad("B", 0)
-                    }.frame(width: 88)
+                    controlDiamond(top: ("X", 9), left: ("Y", 1), right: ("A", 8), bottom: ("B", 0))
                 }
                 HStack(spacing: 12) {
                     gameMenu
-                    Spacer()
-                    pad("MIC", 12)
                     Spacer()
                     pad("SELECT", 2)
                     pad("START", 3)
@@ -153,9 +144,9 @@ struct DSView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, touch ? 4 : 10)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(LinearGradient(colors: [Color(white: 0.19), shell, Color(white: 0.11)], startPoint: .topLeading, endPoint: .bottomTrailing))
+        .background(LinearGradient(colors: [Color(red: 0.77, green: 0.91, blue: 0.95), shell, Color(red: 0.52, green: 0.75, blue: 0.84)], startPoint: .topLeading, endPoint: .bottomTrailing))
         .overlay(alignment: touch ? .top : .bottom) {
-            Rectangle().fill(.black.opacity(0.7)).frame(height: 3).accessibilityHidden(true)
+            Rectangle().fill(controlInk.opacity(0.35)).frame(height: 3).accessibilityHidden(true)
         }
     }
 
@@ -181,16 +172,29 @@ struct DSView: View {
         }
     }
 
+    private func controlDiamond(top: (String, UInt32), left: (String, UInt32), right: (String, UInt32), bottom: (String, UInt32)) -> some View {
+        ZStack {
+            if top.0 == "↑" {
+                RoundedRectangle(cornerRadius: 3).fill(shell).frame(width: 44, height: 44)
+            }
+            pad(top.0, top.1).offset(y: -44)
+            pad(left.0, left.1).offset(x: -44)
+            pad(right.0, right.1).offset(x: 44)
+            pad(bottom.0, bottom.1).offset(y: 44)
+        }
+        .frame(width: 132, height: 132)
+    }
+
     private func pad(_ title: String, _ id: UInt32) -> some View {
         Text(title)
             .font(.system(size: title.count > 2 ? 9 : 16, weight: .bold, design: .monospaced))
-            .foregroundStyle(Color(white: 0.76))
+            .foregroundStyle(controlInk)
             .frame(width: 44, height: 44)
             .background {
                 RoundedRectangle(cornerRadius: title.count == 1 && "ABXY".contains(title) ? 22 : 6)
-                    .fill(LinearGradient(colors: [Color(white: 0.27), Color(white: 0.16)], startPoint: .top, endPoint: .bottom))
-                    .overlay(RoundedRectangle(cornerRadius: title.count == 1 && "ABXY".contains(title) ? 22 : 6).stroke(.black.opacity(0.6), lineWidth: 1))
-                    .shadow(color: .black.opacity(0.6), radius: 1, y: 2)
+                    .fill(LinearGradient(colors: [Color(red: 0.85, green: 0.95, blue: 0.98), Color(red: 0.62, green: 0.82, blue: 0.89)], startPoint: .top, endPoint: .bottom))
+                    .overlay(RoundedRectangle(cornerRadius: title.count == 1 && "ABXY".contains(title) ? 22 : 6).stroke(controlInk.opacity(0.35), lineWidth: 1))
+                    .shadow(color: controlInk.opacity(0.4), radius: 1, y: 2)
                     .padding(3)
             }
             .contentShape(Rectangle())
