@@ -8,6 +8,7 @@ struct DSView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var importing = false
     @State private var about = false
+    private let shell = Color(white: 0.14)
 
     var body: some View {
         NavigationStack {
@@ -24,25 +25,11 @@ struct DSView: View {
                     library
                 }
             }
-            .background(Color.paperyBg)
+            .background(model.game == nil ? Color.paperyBg : shell)
             .navigationTitle(model.game?.title ?? "DS")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                if model.game != nil {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button { model.close() } label: { Label("Library", systemImage: "square.grid.2x2") }
-                    }
-                    ToolbarItemGroup(placement: .topBarTrailing) {
-                        Button { model.paused ? model.resume() : model.pause() } label: {
-                            Label(model.paused ? "Resume" : "Pause", systemImage: model.paused ? "play.fill" : "pause.fill")
-                        }.disabled(model.busy)
-                        Menu {
-                            Button("Save state") { model.state(load: false) }
-                            Button("Load state") { model.state(load: true) }
-                        } label: { Label("Save states", systemImage: "square.and.arrow.down") }
-                        .disabled(model.busy)
-                    }
-                } else {
+                if model.game == nil {
                     ToolbarItem(placement: .topBarLeading) {
                         Button { about = true } label: { Label("About DS", systemImage: "info.circle") }
                     }
@@ -51,9 +38,9 @@ struct DSView: View {
                     }
                 }
             }
-            .safeAreaInset(edge: .bottom) {
-                if !model.status.isEmpty { Text(model.status).font(.caption).padding(6) }
-            }
+            .toolbar(model.game == nil ? .visible : .hidden, for: .navigationBar, .tabBar)
+            .statusBarHidden(model.game != nil)
+            .persistentSystemOverlays(model.game == nil ? .automatic : .hidden)
             .sheet(isPresented: $about) {
                 NavigationStack {
                     ScrollView {
@@ -103,37 +90,73 @@ struct DSView: View {
         }
     }
 
+    private var gameMenu: some View {
+        Menu {
+            Button(model.paused ? "Resume" : "Pause") { model.paused ? model.resume() : model.pause() }
+            Button("Save state") { model.state(load: false) }
+            Button("Load state") { model.state(load: true) }
+            if !model.status.isEmpty { Text(model.status) }
+            Button("Back to library") { model.close() }
+        } label: {
+            Image(systemName: "ellipsis").font(.system(size: 18, weight: .bold))
+                .foregroundStyle(.white.opacity(0.5)).frame(width: 44, height: 44)
+        }.disabled(model.busy)
+    }
+
+    private var speaker: some View {
+        VStack(spacing: 5) {
+            ForEach(0..<6) { _ in
+                Capsule().fill(.black.opacity(0.65)).frame(width: 18, height: 3)
+            }
+        }.accessibilityHidden(true)
+    }
+
     private func screen(image: CGImage?, touch: Bool) -> some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 4) {
             if touch {
                 HStack {
                     pad("L", 10)
                     Spacer()
+                    Capsule().fill(.black.opacity(0.45)).frame(width: 80, height: 5)
+                    Spacer()
                     pad("R", 11)
                 }
-                HStack(spacing: 10) {
-                    VStack(spacing: 4) {
+                HStack(spacing: 8) {
+                    VStack(spacing: 0) {
                         pad("↑", 4)
-                        HStack(spacing: 4) { pad("←", 6); Color.clear.frame(width: 12, height: 44); pad("→", 7) }
+                        HStack(spacing: 0) { pad("←", 6); pad("→", 7) }
                         pad("↓", 5)
-                    }
+                    }.frame(width: 88)
                     display(image: image, touch: true)
-                    VStack(spacing: 4) {
+                    VStack(spacing: 0) {
                         pad("X", 9)
-                        HStack(spacing: 4) { pad("Y", 1); Color.clear.frame(width: 12, height: 44); pad("A", 8) }
+                        HStack(spacing: 0) { pad("Y", 1); pad("A", 8) }
                         pad("B", 0)
-                    }
+                    }.frame(width: 88)
                 }
-                HStack(spacing: 20) {
-                    pad("Select", 2)
-                    pad("Mic", 12)
-                    pad("Start", 3)
+                HStack(spacing: 12) {
+                    gameMenu
+                    Spacer()
+                    pad("MIC", 12)
+                    Spacer()
+                    pad("SELECT", 2)
+                    pad("START", 3)
                 }
             } else {
-                display(image: image, touch: false)
+                HStack(spacing: 12) {
+                    speaker
+                    display(image: image, touch: false)
+                    speaker
+                }
             }
         }
-        .padding(12)
+        .padding(.horizontal, 10)
+        .padding(.vertical, touch ? 4 : 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(LinearGradient(colors: [Color(white: 0.19), shell, Color(white: 0.11)], startPoint: .topLeading, endPoint: .bottomTrailing))
+        .overlay(alignment: touch ? .top : .bottom) {
+            Rectangle().fill(.black.opacity(0.7)).frame(height: 3).accessibilityHidden(true)
+        }
     }
 
     private func display(image: CGImage?, touch: Bool) -> some View {
@@ -146,7 +169,9 @@ struct DSView: View {
                 if model.paused { Text("Paused").foregroundStyle(.white).padding(8).background(.black.opacity(0.65), in: Capsule()) }
             }
             .frame(width: width, height: height)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+            .overlay(RoundedRectangle(cornerRadius: 3).stroke(Color.black, lineWidth: 5))
+            .shadow(color: .black.opacity(0.6), radius: 2, y: 2)
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0).onChanged { value in
                 guard touch, !model.paused else { return }
@@ -158,10 +183,16 @@ struct DSView: View {
 
     private func pad(_ title: String, _ id: UInt32) -> some View {
         Text(title)
-            .font(.system(.subheadline, design: .monospaced).weight(.semibold))
-            .frame(minWidth: 44, minHeight: 44)
-            .padding(.horizontal, title.count > 2 ? 5 : 0)
-            .background(Color.paperyInk.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+            .font(.system(size: title.count > 2 ? 9 : 16, weight: .bold, design: .monospaced))
+            .foregroundStyle(Color(white: 0.76))
+            .frame(width: 44, height: 44)
+            .background {
+                RoundedRectangle(cornerRadius: title.count == 1 && "ABXY".contains(title) ? 22 : 6)
+                    .fill(LinearGradient(colors: [Color(white: 0.27), Color(white: 0.16)], startPoint: .top, endPoint: .bottom))
+                    .overlay(RoundedRectangle(cornerRadius: title.count == 1 && "ABXY".contains(title) ? 22 : 6).stroke(.black.opacity(0.6), lineWidth: 1))
+                    .shadow(color: .black.opacity(0.6), radius: 1, y: 2)
+                    .padding(3)
+            }
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { _ in if !model.paused { ds_button(id, true) } }
