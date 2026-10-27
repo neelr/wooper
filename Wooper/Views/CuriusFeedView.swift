@@ -81,6 +81,35 @@ struct CuriusFeedView: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .contextMenu {
+                                Button {
+                                    if let url = URL(string: item.url) { openURL(url) }
+                                } label: {
+                                    Label("Open article", systemImage: "safari")
+                                }
+                                Button {
+                                    Task { await store.save(item) }
+                                } label: {
+                                    Label(item.saved ? "Already in Papery" : "Save to Papery",
+                                          systemImage: item.saved ? "checkmark" : "plus")
+                                }
+                                .disabled(item.saved || store.saving.contains(item.id))
+                            } preview: {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    PaperThumb(url: item.url, width: 320, height: 240)
+                                    Text(item.title.isEmpty ? item.url : item.title)
+                                        .font(.headline)
+                                        .lineLimit(3)
+                                    if let host = URL(string: item.url)?.host {
+                                        Text(host).font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Text(item.metadata).font(.caption).foregroundStyle(.secondary)
+                                }
+                                .padding(16)
+                                .frame(width: 352, alignment: .leading)
+                                .background(Color.paperyBg)
+                            }
+                            .accessibilityHint("Touch and hold to preview the article")
                             Button {
                                 Task { await store.save(item) }
                             } label: {
