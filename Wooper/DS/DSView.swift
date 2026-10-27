@@ -105,38 +105,55 @@ struct DSView: View {
 
     private func screen(image: CGImage?, touch: Bool) -> some View {
         VStack(spacing: 8) {
-            Text(touch ? "TOUCH SCREEN" : "TOP SCREEN")
-                .font(.system(.caption2, design: .monospaced)).foregroundStyle(.secondary)
-            GeometryReader { geometry in
-                let width = min(geometry.size.width, geometry.size.height * 4 / 3)
-                let height = width * 3 / 4
-                ZStack {
-                    Color.black
-                    if let image { Image(decorative: image, scale: 1).resizable().interpolation(.none) }
-                    if model.paused { Text("Paused").foregroundStyle(.white).padding(8).background(.black.opacity(0.65), in: Capsule()) }
+            if touch {
+                HStack {
+                    pad("L", 10)
+                    Spacer()
+                    pad("R", 11)
                 }
-                .frame(width: width, height: height)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .contentShape(Rectangle())
-                .gesture(DragGesture(minimumDistance: 0).onChanged { value in
-                    guard touch, !model.paused else { return }
-                    ds_touch(Int32(value.location.x / width * 256), Int32(value.location.y / height * 192), true)
-                }.onEnded { _ in if touch { ds_touch(0, 0, false) } })
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            HStack(spacing: 16) {
-                if touch {
-                    pad("Y", 1); pad("X", 9); pad("B", 0); pad("A", 8); pad("R", 11)
-                } else {
-                    pad("L", 10); pad("←", 6); VStack(spacing: 4) { pad("↑", 4); pad("↓", 5) }; pad("→", 7)
+                HStack(spacing: 10) {
+                    VStack(spacing: 4) {
+                        pad("↑", 4)
+                        HStack(spacing: 4) { pad("←", 6); Color.clear.frame(width: 12, height: 44); pad("→", 7) }
+                        pad("↓", 5)
+                    }
+                    display(image: image, touch: true)
+                    VStack(spacing: 4) {
+                        pad("X", 9)
+                        HStack(spacing: 4) { pad("Y", 1); Color.clear.frame(width: 12, height: 44); pad("A", 8) }
+                        pad("B", 0)
+                    }
                 }
-            }
-            HStack(spacing: 24) {
-                if touch { pad("Start", 3); pad("Select", 2) }
-                else { pad("Mic", 12) }
+                HStack(spacing: 20) {
+                    pad("Select", 2)
+                    pad("Mic", 12)
+                    pad("Start", 3)
+                }
+            } else {
+                display(image: image, touch: false)
             }
         }
         .padding(12)
+    }
+
+    private func display(image: CGImage?, touch: Bool) -> some View {
+        GeometryReader { geometry in
+            let width = max(1, min(geometry.size.width, geometry.size.height * 4 / 3))
+            let height = width * 3 / 4
+            ZStack {
+                Color.black
+                if let image { Image(decorative: image, scale: 1).resizable().interpolation(.none) }
+                if model.paused { Text("Paused").foregroundStyle(.white).padding(8).background(.black.opacity(0.65), in: Capsule()) }
+            }
+            .frame(width: width, height: height)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0).onChanged { value in
+                guard touch, !model.paused else { return }
+                ds_touch(Int32(value.location.x / width * 256), Int32(value.location.y / height * 192), true)
+            }.onEnded { _ in if touch { ds_touch(0, 0, false) } })
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
     }
 
     private func pad(_ title: String, _ id: UInt32) -> some View {
