@@ -21,3 +21,6 @@ build/
 Packages/
 Package.pins
 Package.resolved
+
+# Papery token (local only)
+PaperyShared/PaperyConfig.swift

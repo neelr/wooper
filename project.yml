@@ -10,7 +10,7 @@ settings:
     SWIFT_VERSION: "5.9"
     GENERATE_INFOPLIST_FILE: YES
     CODE_SIGN_STYLE: Automatic
-    DEVELOPMENT_TEAM: UT9BBXAFRT
+    DEVELOPMENT_TEAM: UC63C5M72P
 
 targets:
   Wooper:
@@ -21,11 +21,15 @@ targets:
         excludes:
           - "Secrets.example.swift"
       - path: Shared
+      - path: PaperyShared
+        excludes:
+          - "PaperyConfig.example.swift"
     settings:
       base:
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "Wooper needs microphone access to record voice memos."
+        INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: "Wooper syncs your papery reading list to your e-reader over Bluetooth."
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Wooper transcribes your voice memos to save to Notion."
         INFOPLIST_KEY_NSSupportsLiveActivities: YES
         INFOPLIST_KEY_CFBundleDisplayName: "wooper"
@@ -39,10 +43,53 @@ targets:
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         UIBackgroundModes:
           - audio
+          - bluetooth-central
+          - remote-notification
+          - fetch
+        BGTaskSchedulerPermittedIdentifiers:
+          - com.neelr.Wooper.lensrefresh
+        NSAppTransportSecurity:
+          NSExceptionDomains:
+            tail90f369.ts.net:
+              NSExceptionAllowsInsecureHTTPLoads: true
+              NSIncludesSubdomains: true
     entitlements:
       path: Wooper/Wooper.entitlements
+      properties:
+        aps-environment: development
     dependencies:
       - target: RecordingActivity
+      - target: PaperyShare
+
+  PaperyShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: PaperyShare
+      - path: PaperyShared
+        excludes:
+          - "PaperyConfig.example.swift"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.neelr.Wooper.PaperyShare
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        INFOPLIST_KEY_CFBundleDisplayName: "Save to Papery"
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+    info:
+      path: PaperyShare/Info.plist
+      properties:
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        CFBundleDisplayName: "Save to Papery"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsWebPageWithMaxCount: 1
+    dependencies: []
 
   RecordingActivity:
     type: app-extension

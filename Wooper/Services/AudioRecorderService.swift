@@ -28,7 +28,32 @@ final class AudioRecorderService {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
 
+    // Engine health
+    private var inputFormat: AVAudioFormat?
+    private var monoFormat: AVAudioFormat?
+    private var lastBufferTime: Date?
+
     private let maxLevelSamples = 300
+
+    private init() {
+        // Listen for audio session interruptions (calls, notifications, other apps)
+        NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            self?.handleInterruption(notification)
+        }
+
+        // Listen for audio engine being stopped by the system
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name.AVAudioEngineConfigurationChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleEngineConfigChange()
+        }
+    }
 
     @discardableResult
     func startRecording() -> Bool {
@@ -57,72 +82,26 @@ final class AudioRecorderService {
         do {
             let engine = AVAudioEngine()
             let inputNode = engine.inputNode
-            let inputFormat = inputNode.outputFormat(forBus: 0)
+            let format = inputNode.outputFormat(forBus: 0)
+            inputFormat = format
 
             let outputSettings: [String: Any] = [
                 AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-                AVSampleRateKey: inputFormat.sampleRate,
+                AVSampleRateKey: format.sampleRate,
                 AVNumberOfChannelsKey: 1,
                 AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
             ]
 
-            guard let monoFormat = AVAudioFormat(standardFormatWithSampleRate: inputFormat.sampleRate, channels: 1) else {
-                lastError = "Could not create mono format"
-                endBackgroundTask()
-                return false
-            }
+            let mono = AVAudioFormat(standardFormatWithSampleRate: format.sampleRate, channels: 1)
+            monoFormat = mono
 
             let file = try AVAudioFile(forWriting: fileURL, settings: outputSettings)
             outputFile = file
 
             // Start live transcription
-            startLiveTranscription(format: inputFormat)
+            startLiveTranscription(format: format)
 
-            inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
-                guard let self else { return }
-
-                // Feed buffer to speech recognizer
-                self.recognitionRequest?.append(buffer)
-
-                // Write to file (downmix to mono if needed)
-                if inputFormat.channelCount > 1 {
-                    if let monoBuffer = AVAudioPCMBuffer(pcmFormat: monoFormat, frameCapacity: buffer.frameLength) {
-                        monoBuffer.frameLength = buffer.frameLength
-                        if let src = buffer.floatChannelData, let dst = monoBuffer.floatChannelData {
-                            let frames = Int(buffer.frameLength)
-                            let channels = Int(inputFormat.channelCount)
-                            for i in 0..<frames {
-                                var sum: Float = 0
-                                for ch in 0..<channels { sum += src[ch][i] }
-                                dst[0][i] = sum / Float(channels)
-                            }
-                        }
-                        try? file.write(from: monoBuffer)
-                    }
-                } else {
-                    try? file.write(from: buffer)
-                }
-
-                // RMS level for waveform
-                if let channelData = buffer.floatChannelData {
-                    let frames = Int(buffer.frameLength)
-                    var sum: Float = 0
-                    for i in 0..<frames {
-                        let s = channelData[0][i]
-                        sum += s * s
-                    }
-                    let rms = sqrt(sum / Float(frames))
-                    let db = 20 * log10(max(rms, 0.000001))
-                    let level = CGFloat(max(0, min(1, (db + 40) / 35)))
-
-                    DispatchQueue.main.async {
-                        if self.audioLevels.count >= self.maxLevelSamples {
-                            self.audioLevels.removeFirst()
-                        }
-                        self.audioLevels.append(level)
-                    }
-                }
-            }
+            installTap(on: engine, format: format, monoFormat: mono, file: file)
 
             engine.prepare()
             try engine.start()
@@ -132,6 +111,7 @@ final class AudioRecorderService {
             startTime = Date.now
             audioLevels = []
             lastLiveActivitySecond = -1
+            lastBufferTime = Date.now
 
             startBackgroundTimer()
             startLiveActivity(title: "Recording")
@@ -145,6 +125,115 @@ final class AudioRecorderService {
             lastError = "Engine start: \(error.localizedDescription)"
             endBackgroundTask()
             return false
+        }
+    }
+
+    private func installTap(on engine: AVAudioEngine, format: AVAudioFormat, monoFormat: AVAudioFormat?, file: AVAudioFile) {
+        let inputNode = engine.inputNode
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in
+            guard let self else { return }
+
+            self.lastBufferTime = Date()
+
+            // Feed buffer to speech recognizer
+            self.recognitionRequest?.append(buffer)
+
+            // Write to file (downmix to mono if needed)
+            if format.channelCount > 1, let monoFormat {
+                if let monoBuffer = AVAudioPCMBuffer(pcmFormat: monoFormat, frameCapacity: buffer.frameLength) {
+                    monoBuffer.frameLength = buffer.frameLength
+                    if let src = buffer.floatChannelData, let dst = monoBuffer.floatChannelData {
+                        let frames = Int(buffer.frameLength)
+                        let channels = Int(format.channelCount)
+                        for i in 0..<frames {
+                            var sum: Float = 0
+                            for ch in 0..<channels { sum += src[ch][i] }
+                            dst[0][i] = sum / Float(channels)
+                        }
+                    }
+                    try? file.write(from: monoBuffer)
+                }
+            } else {
+                try? file.write(from: buffer)
+            }
+
+            // RMS level for waveform
+            if let channelData = buffer.floatChannelData {
+                let frames = Int(buffer.frameLength)
+                var sum: Float = 0
+                for i in 0..<frames {
+                    let s = channelData[0][i]
+                    sum += s * s
+                }
+                let rms = sqrt(sum / Float(frames))
+                let db = 20 * log10(max(rms, 0.000001))
+                let level = CGFloat(max(0, min(1, (db + 40) / 35)))
+
+                DispatchQueue.main.async {
+                    if self.audioLevels.count >= self.maxLevelSamples {
+                        self.audioLevels.removeFirst()
+                    }
+                    self.audioLevels.append(level)
+                }
+            }
+        }
+    }
+
+    // MARK: - Interruption Handling
+
+    private func handleInterruption(_ notification: Notification) {
+        guard isRecording,
+              let userInfo = notification.userInfo,
+              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
+
+        switch type {
+        case .began:
+            // Audio interrupted (call, Siri, etc.) — engine pauses automatically
+            print("[Wooper] Audio interrupted")
+        case .ended:
+            // Interruption ended — restart the engine
+            print("[Wooper] Interruption ended, restarting engine")
+            let options = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+            if AVAudioSession.InterruptionOptions(rawValue: options).contains(.shouldResume) {
+                restartEngine()
+            } else {
+                // Try to restart anyway
+                restartEngine()
+            }
+        @unknown default:
+            break
+        }
+    }
+
+    private func handleEngineConfigChange() {
+        guard isRecording else { return }
+        print("[Wooper] Engine config changed, restarting")
+        restartEngine()
+    }
+
+    private func restartEngine() {
+        guard isRecording, let engine = audioEngine, let file = outputFile else { return }
+
+        // Re-activate audio session
+        let session = AVAudioSession.sharedInstance()
+        try? session.setActive(true)
+
+        // Remove old tap and reinstall
+        engine.inputNode.removeTap(onBus: 0)
+
+        if let format = inputFormat {
+            installTap(on: engine, format: format, monoFormat: monoFormat, file: file)
+        }
+
+        // Restart engine
+        engine.prepare()
+        do {
+            try engine.start()
+            print("[Wooper] Engine restarted successfully")
+        } catch {
+            print("[Wooper] Engine restart failed: \(error)")
+            lastError = "Engine restart failed: \(error.localizedDescription)"
         }
     }
 
@@ -168,6 +257,8 @@ final class AudioRecorderService {
         }
         outputFile = nil
         audioEngine = nil
+        inputFormat = nil
+        monoFormat = nil
 
         stopTimers()
         endBackgroundTask()
@@ -194,9 +285,20 @@ final class AudioRecorderService {
 
     // MARK: - Live Transcription
 
+    private var accumulatedTranscript: String = ""
+    private var currentSegmentTranscript: String = ""
+
     private func startLiveTranscription(format: AVAudioFormat) {
         speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
         guard let speechRecognizer, speechRecognizer.isAvailable else { return }
+
+        accumulatedTranscript = ""
+        currentSegmentTranscript = ""
+        beginRecognitionSegment()
+    }
+
+    private func beginRecognitionSegment() {
+        guard let speechRecognizer, speechRecognizer.isAvailable, isRecording else { return }
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
@@ -207,13 +309,32 @@ final class AudioRecorderService {
         recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
             guard let self else { return }
             if let result {
+                let text = result.bestTranscription.formattedString
+                self.currentSegmentTranscript = text
                 DispatchQueue.main.async {
-                    self.liveTranscript = result.bestTranscription.formattedString
+                    self.liveTranscript = self.accumulatedTranscript
+                        + (self.accumulatedTranscript.isEmpty ? "" : " ")
+                        + text
+                }
+                if result.isFinal {
+                    // Segment finished — accumulate and start a new one
+                    self.accumulatedTranscript += (self.accumulatedTranscript.isEmpty ? "" : " ") + text
+                    self.currentSegmentTranscript = ""
+                    self.recognitionRequest = nil
+                    self.recognitionTask = nil
+                    self.beginRecognitionSegment()
                 }
             }
-            if error != nil || (result?.isFinal == true) {
+            if let error, (result?.isFinal != true) {
+                // Error (usually timeout) — accumulate what we have and restart
+                if !self.currentSegmentTranscript.isEmpty {
+                    self.accumulatedTranscript += (self.accumulatedTranscript.isEmpty ? "" : " ") + self.currentSegmentTranscript
+                }
+                self.currentSegmentTranscript = ""
                 self.recognitionRequest = nil
                 self.recognitionTask = nil
+                print("[Wooper] Recognition segment ended: \(error.localizedDescription), restarting")
+                self.beginRecognitionSegment()
             }
         }
     }
@@ -227,6 +348,16 @@ final class AudioRecorderService {
             guard let self, self.isRecording, let start = self.startTime else { return }
             let elapsed = Date.now.timeIntervalSince(start)
             let second = Int(elapsed)
+
+            // Check engine health — if no buffer received in 5s, try restarting
+            if let lastBuffer = self.lastBufferTime,
+               Date().timeIntervalSince(lastBuffer) > 5 {
+                print("[Wooper] No audio buffers for 5s, restarting engine")
+                DispatchQueue.main.async {
+                    self.restartEngine()
+                }
+            }
+
             if second != self.lastLiveActivitySecond {
                 self.lastLiveActivitySecond = second
                 DispatchQueue.main.async {

@@ -8,17 +8,17 @@ struct RecordingRow: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(recording.title)
-                    .font(.headline)
-                    .foregroundStyle(.white)
+                    .font(.system(.subheadline, design: .monospaced))
+                    .foregroundStyle(Color.paperyInk)
 
                 HStack(spacing: 12) {
                     Text(recording.date.formatted(date: .abbreviated, time: .shortened))
-                        .font(.caption)
-                        .foregroundStyle(.gray)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(Color.paperyMeta)
 
                     Text(formattedDuration(recording.duration))
-                        .font(.caption)
-                        .foregroundStyle(.gray)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(Color.paperyMeta)
                 }
             }
 
@@ -30,7 +30,7 @@ struct RecordingRow: View {
                 } label: {
                     Image(systemName: "note.text")
                         .font(.caption)
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(Color.paperyMeta)
                 }
                 .buttonStyle(.plain)
             }

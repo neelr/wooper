@@ -12,7 +12,7 @@ struct RecorderView: View {
             // Elapsed time
             Text(formattedTime(recorder.elapsedTime))
                 .font(.system(size: 64, weight: .thin, design: .monospaced))
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.paperyInk)
 
             // Waveform
             WaveformView(levels: recorder.audioLevels)
@@ -38,7 +38,7 @@ struct RecorderView: View {
             .padding(.bottom, 48)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.black)
+        .background(Color.paperyBg.ignoresSafeArea())
         .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -46,7 +46,7 @@ struct RecorderView: View {
                     _ = recorder.stopRecording()
                     dismiss()
                 }
-                .foregroundStyle(.red)
+                .foregroundStyle(Color.paperyMeta)
             }
         }
         .onAppear {
@@ -57,47 +57,11 @@ struct RecorderView: View {
     }
 
     private func stopAndSave() {
-        guard let (url, duration) = recorder.stopRecording() else {
-            dismiss()
-            return
-        }
-
-        let recording = Recording(
-            title: "New Recording",
-            duration: duration,
-            fileName: url.lastPathComponent
+        RecordingProcessor.saveStoppedRecording(
+            recorder: recorder,
+            modelContext: modelContext
         )
-        modelContext.insert(recording)
         dismiss()
-
-        Task {
-            do {
-                async let cdnUpload = CDNService.upload(fileURL: url)
-                async let transcription = TranscriptionService.transcribe(url: url)
-
-                let cdnURL = try await cdnUpload
-                await MainActor.run { recording.cdnURL = cdnURL }
-
-                let transcript = (try? await transcription) ?? ""
-
-                // Auto-title via Claude Haiku
-                if !transcript.isEmpty {
-                    let autoTitle = (try? await ClaudeService.generateTitle(from: transcript)) ?? transcript.components(separatedBy: ".").first ?? "Voice Memo"
-                    await MainActor.run {
-                        recording.title = autoTitle
-                    }
-                }
-
-                let notionURL = try await NotionService.createEntry(
-                    title: recording.title,
-                    transcript: transcript,
-                    audioURL: cdnURL
-                )
-                await MainActor.run { recording.notionURL = notionURL }
-            } catch {
-                print("Post-save pipeline failed: \(error)")
-            }
-        }
     }
 
     private func formattedTime(_ time: TimeInterval) -> String {

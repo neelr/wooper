@@ -7,6 +7,7 @@ struct StopRecordingIntent: AppIntent {
     static var openAppWhenRun: Bool = false
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
+        let savedTranscript = await MainActor.run { AudioRecorderService.shared.liveTranscript }
         let result = await MainActor.run {
             AudioRecorderService.shared.stopRecording()
         }
@@ -28,10 +29,7 @@ struct StopRecordingIntent: AppIntent {
 
         Task.detached {
             do {
-                async let cdnUpload = CDNService.upload(fileURL: url)
-                async let transcription = TranscriptionService.transcribe(url: url)
-
-                let cdnURL = try await cdnUpload
+                let cdnURL = try await CDNService.upload(fileURL: url)
                 let pipelineContext = ModelContext(container)
                 let fetchFileName = fileName
                 if let saved = try? pipelineContext.fetch(
@@ -43,7 +41,13 @@ struct StopRecordingIntent: AppIntent {
                     try? pipelineContext.save()
                 }
 
-                let transcript = (try? await transcription) ?? ""
+                // Use live transcript if available, fall back to file transcription
+                let transcript: String
+                if !savedTranscript.isEmpty {
+                    transcript = savedTranscript
+                } else {
+                    transcript = (try? await TranscriptionService.transcribe(url: url)) ?? ""
+                }
 
                 var title = "New Recording"
                 if !transcript.isEmpty {

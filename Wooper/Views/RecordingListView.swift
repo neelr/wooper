@@ -11,19 +11,19 @@ struct RecordingListView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.black.ignoresSafeArea()
+                Color.paperyBg.ignoresSafeArea()
 
                 if recordings.isEmpty {
                     VStack(spacing: 16) {
                         Image(systemName: "waveform")
                             .font(.system(size: 48))
-                            .foregroundStyle(.gray)
+                            .foregroundStyle(Color.paperyMeta)
                         Text("No Recordings")
-                            .font(.title3)
-                            .foregroundStyle(.gray)
+                            .font(.system(.title3, design: .monospaced))
+                            .foregroundStyle(Color.paperyMeta)
                         Text("Tap the record button to start")
-                            .font(.subheadline)
-                            .foregroundStyle(.gray.opacity(0.7))
+                            .font(.system(.subheadline, design: .monospaced))
+                            .foregroundStyle(Color.paperyMeta.opacity(0.7))
                     }
                 } else {
                     List {
@@ -31,7 +31,8 @@ struct RecordingListView: View {
                             NavigationLink(destination: PlaybackView(recording: recording)) {
                                 RecordingRow(recording: recording)
                             }
-                            .listRowBackground(Color(.systemGray6).opacity(0.15))
+                            .listRowBackground(Color.paperyBg)
+                            .listRowSeparatorTint(Color.paperyMeta.opacity(0.3))
                         }
                         .onDelete(perform: deleteRecordings)
                     }
@@ -48,12 +49,15 @@ struct RecordingListView: View {
                                 .fill(.red)
                                 .frame(width: 10, height: 10)
                             Text(formattedTime(recorder.elapsedTime))
-                                .font(.headline.monospacedDigit())
-                                .foregroundStyle(.white)
+                                .font(.system(.headline, design: .monospaced).monospacedDigit())
+                                .foregroundStyle(Color.paperyInk)
                             WaveformView(levels: recorder.audioLevels, barWidth: 2, barSpacing: 2, minBarHeight: 2)
                                 .frame(height: 24)
                             Button {
-                                stopFromIntent()
+                                RecordingProcessor.saveStoppedRecording(
+                                    recorder: recorder,
+                                    modelContext: modelContext
+                                )
                             } label: {
                                 Image(systemName: "stop.fill")
                                     .font(.callout)
@@ -64,7 +68,7 @@ struct RecordingListView: View {
                         }
                         .padding(.horizontal, 20)
                         .padding(.vertical, 14)
-                        .background(.ultraThinMaterial.opacity(0.8))
+                        .background(.thinMaterial)
                         .clipShape(RoundedRectangle(cornerRadius: 16))
                         .padding(.horizontal, 16)
                         .padding(.bottom, 24)
@@ -78,7 +82,7 @@ struct RecordingListView: View {
                                     .fill(.red)
                                     .frame(width: 64, height: 64)
                                 Circle()
-                                    .stroke(.white.opacity(0.3), lineWidth: 3)
+                                    .stroke(Color.paperyInk.opacity(0.15), lineWidth: 3)
                                     .frame(width: 72, height: 72)
                             }
                         }
@@ -86,70 +90,26 @@ struct RecordingListView: View {
                     }
                 }
             }
-            .navigationTitle("Wooper")
+            .navigationTitle("wooper")
+            .toolbarTitleDisplayMode(.inlineLarge)
+            .toolbarBackground(Color.paperyBg, for: .navigationBar)
             .navigationDestination(isPresented: $navigateToRecorder) {
                 RecorderView(recorder: recorder)
             }
-            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     EditButton()
-                        .foregroundStyle(.red)
                 }
             }
         }
-        .preferredColorScheme(.dark)
-        .onReceive(NotificationCenter.default.publisher(for: .startRecordingIntent)) { _ in
-            if !recorder.isRecording {
-                recorder.startRecording()
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .stopRecordingFromWidget)) { _ in
-            if recorder.isRecording {
-                stopFromIntent()
-            }
-        }
+        .preferredColorScheme(.light)
+        .tint(Color.paperyInk)
     }
 
     private func formattedTime(_ time: TimeInterval) -> String {
         let minutes = Int(time) / 60
         let seconds = Int(time) % 60
         return String(format: "%d:%02d", minutes, seconds)
-    }
-
-    private func stopFromIntent() {
-        guard let (url, duration) = recorder.stopRecording() else { return }
-        let recording = Recording(
-            title: "New Recording",
-            duration: duration,
-            fileName: url.lastPathComponent
-        )
-        modelContext.insert(recording)
-
-        Task {
-            do {
-                async let cdnUpload = CDNService.upload(fileURL: url)
-                async let transcription = TranscriptionService.transcribe(url: url)
-
-                let cdnURL = try await cdnUpload
-                await MainActor.run { recording.cdnURL = cdnURL }
-
-                let transcript = (try? await transcription) ?? ""
-                if !transcript.isEmpty {
-                    let autoTitle = (try? await ClaudeService.generateTitle(from: transcript)) ?? transcript.components(separatedBy: ".").first ?? "Voice Memo"
-                    await MainActor.run { recording.title = autoTitle }
-                }
-
-                let notionURL = try await NotionService.createEntry(
-                    title: recording.title,
-                    transcript: transcript,
-                    audioURL: cdnURL
-                )
-                await MainActor.run { recording.notionURL = notionURL }
-            } catch {
-                print("Post-save pipeline failed: \(error)")
-            }
-        }
     }
 
     private func deleteRecordings(at offsets: IndexSet) {

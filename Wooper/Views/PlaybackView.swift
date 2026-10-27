@@ -20,8 +20,8 @@ struct PlaybackView: View {
         VStack(spacing: 20) {
             // Title
             TextField("Recording Name", text: $editableTitle)
-                .font(.title2.bold())
-                .foregroundStyle(.white)
+                .font(.system(.title2, design: .monospaced).bold())
+                .foregroundStyle(Color.paperyInk)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
                 .onSubmit {
@@ -30,8 +30,8 @@ struct PlaybackView: View {
 
             // Date + Duration
             Text("\(recording.date.formatted(date: .long, time: .shortened)) • \(formattedDuration(recording.duration))")
-                .font(.subheadline)
-                .foregroundStyle(.gray)
+                .font(.system(.subheadline, design: .monospaced))
+                .foregroundStyle(Color.paperyMeta)
 
             Spacer()
 
@@ -56,11 +56,11 @@ struct PlaybackView: View {
             HStack {
                 Text(formattedTime(displayTime))
                     .font(.caption.monospacedDigit())
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.paperyInk)
                 Spacer()
                 Text("-\(formattedTime(max(0, player.duration - displayTime)))")
                     .font(.caption.monospacedDigit())
-                    .foregroundStyle(.gray)
+                    .foregroundStyle(Color.paperyMeta)
             }
             .padding(.horizontal, 16)
 
@@ -73,7 +73,7 @@ struct PlaybackView: View {
                 } label: {
                     Image(systemName: "gobackward.15")
                         .font(.title)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.paperyInk)
                 }
 
                 Button {
@@ -81,7 +81,7 @@ struct PlaybackView: View {
                 } label: {
                     Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                         .font(.system(size: 64))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.paperyInk)
                 }
 
                 Button {
@@ -89,13 +89,13 @@ struct PlaybackView: View {
                 } label: {
                     Image(systemName: "goforward.15")
                         .font(.title)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.paperyInk)
                 }
             }
             .padding(.bottom, 48)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.black)
+        .background(Color.paperyBg.ignoresSafeArea())
         .onAppear {
             editableTitle = recording.title
             player.loadAudio(url: recording.fileURL)
@@ -143,7 +143,7 @@ struct ScrubWaveformView: View {
                     ForEach(Array(displayLevels.enumerated()), id: \.offset) { index, level in
                         let barX = Double(index) / Double(max(1, barCount - 1))
                         RoundedRectangle(cornerRadius: barWidth / 2)
-                            .fill(barX <= progress ? Color.red : Color.white.opacity(0.25))
+                            .fill(barX <= progress ? Color.paperyInk : Color.paperyMeta.opacity(0.35))
                             .frame(
                                 width: barWidth,
                                 height: max(2, level * geometry.size.height * 0.9)
@@ -154,7 +154,7 @@ struct ScrubWaveformView: View {
 
                 // Playhead
                 Rectangle()
-                    .fill(.white)
+                    .fill(Color.paperyInk)
                     .frame(width: 2, height: geometry.size.height)
                     .offset(x: playheadX - 1)
             }

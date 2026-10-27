@@ -6,4 +6,5 @@ enum Secrets {
     static let notionToken = "your-notion-token"
     static let notionDatabaseID = "your-notion-database-id"
     static let cdnToken = "your-cdn-token"
+    static let homeAPIKey = "your-home-api-key"
 }
