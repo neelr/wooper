@@ -53,18 +53,18 @@ struct CuriusFeedView: View {
             LazyVStack(alignment: .leading, spacing: 14) {
                 if let error = store.error {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(error).font(.caption).foregroundStyle(.secondary)
+                        Text(error).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
                         Button("Retry") { Task { await store.load(refresh: store.items.isEmpty) } }
                     }
                 }
                 if store.loaded && store.items.isEmpty && store.error == nil {
-                    Text("Nothing new in your feed.").font(.subheadline).foregroundStyle(.secondary)
+                    Text("Nothing new in your feed.").font(.system(.subheadline, design: .monospaced)).foregroundStyle(.secondary)
                 }
                 ForEach(Array(store.items.enumerated()), id: \.element.id) { index, item in
                     VStack(alignment: .leading, spacing: 5) {
                         if index == 0 || store.items[index - 1].day != item.day {
                             Text(item.day)
-                                .font(.caption)
+                                .font(.system(.caption, design: .monospaced))
                                 .foregroundStyle(.tertiary).padding(.top, index == 0 ? 0 : 12)
                         }
                         HStack(alignment: .top, spacing: 4) {
@@ -73,9 +73,9 @@ struct CuriusFeedView: View {
                             } label: {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(item.title.isEmpty ? item.url : item.title)
-                                        .font(horizontalSizeClass == .regular ? .body : .subheadline).lineLimit(3)
+                                        .font(.system(horizontalSizeClass == .regular ? .body : .subheadline, design: .monospaced)).lineLimit(3)
                                         .foregroundStyle(Color.paperyInk)
-                                    Text(item.metadata).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                    Text(item.metadata).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .contentShape(Rectangle())
@@ -95,26 +95,15 @@ struct CuriusFeedView: View {
                                 }
                                 .disabled(item.saved || store.saving.contains(item.id))
                             } preview: {
-                                VStack(alignment: .leading, spacing: 10) {
-                                    PaperThumb(url: item.url, width: 320, height: 240)
-                                    Text(item.title.isEmpty ? item.url : item.title)
-                                        .font(.headline)
-                                        .lineLimit(3)
-                                    if let host = URL(string: item.url)?.host {
-                                        Text(host).font(.caption).foregroundStyle(.secondary)
-                                    }
-                                    Text(item.metadata).font(.caption).foregroundStyle(.secondary)
-                                }
-                                .padding(16)
-                                .frame(width: 352, alignment: .leading)
-                                .background(Color.paperyBg)
+                                PaperThumb(url: item.url, width: 320, height: 240)
+                                    .accessibilityLabel(item.title.isEmpty ? item.url : item.title)
                             }
                             .accessibilityHint("Touch and hold to preview the article")
                             Button {
                                 Task { await store.save(item) }
                             } label: {
                                 Image(systemName: item.saved ? "checkmark" : "plus")
-                                    .font(.caption)
+                                    .font(.system(.caption, design: .monospaced))
                                     .foregroundStyle(.secondary)
                                     .frame(width: 44, height: 44)
                             }
