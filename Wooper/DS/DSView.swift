@@ -27,6 +27,7 @@ struct DSView: View {
                 }
             }
             .background(model.game == nil ? Color.paperyBg : shell)
+            .background(DSOrientationLock(locked: model.game != nil))
             .navigationTitle(model.game?.title ?? "DS")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -203,5 +204,52 @@ struct DSView: View {
                 .onEnded { _ in ds_button(id, false) })
             .accessibilityLabel(title).accessibilityAddTraits(.isButton)
             .accessibilityAction { ds_button(id, true); DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { ds_button(id, false) } }
+    }
+}
+
+
+/// The verified Duo playing pose is portraitUpsideDown: its hinge runs horizontally.
+/// Scope the restriction to this window and release it when gameplay disappears.
+@MainActor
+struct DSOrientationLock: UIViewRepresentable {
+    let locked: Bool
+    private static var lockedWindows: Set<ObjectIdentifier> = []
+
+    static func orientations(for window: UIWindow?) -> UIInterfaceOrientationMask {
+        guard let window, lockedWindows.contains(ObjectIdentifier(window)) else { return .all }
+        return .portraitUpsideDown
+    }
+
+    func makeUIView(context: Context) -> LockView { LockView() }
+    func updateUIView(_ view: LockView, context: Context) { view.setLocked(locked) }
+    static func dismantleUIView(_ view: LockView, coordinator: ()) { view.setLocked(false) }
+
+    final class LockView: UIView {
+        private var wantsLock = false
+        private weak var appliedWindow: UIWindow?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            apply()
+        }
+
+        func setLocked(_ locked: Bool) {
+            wantsLock = locked
+            apply()
+        }
+
+        private func apply() {
+            let target = wantsLock ? window : nil
+            guard target !== appliedWindow else { return }
+            if let previous = appliedWindow {
+                DSOrientationLock.lockedWindows.remove(ObjectIdentifier(previous))
+                previous.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+            }
+            appliedWindow = target
+            guard let target else { return }
+            DSOrientationLock.lockedWindows.insert(ObjectIdentifier(target))
+            target.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+            target.windowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: .portraitUpsideDown))
+        }
     }
 }

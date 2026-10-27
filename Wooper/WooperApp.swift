@@ -15,6 +15,11 @@ extension Notification.Name {
 final class WooperAppDelegate: NSObject, UIApplicationDelegate {
     static let lensRefreshTaskID = "com.neelr.Wooper.lensrefresh"
 
+    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        DSOrientationLock.orientations(for: window)
+    }
+
+
     func application(
         _ application: UIApplication,
         willFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
