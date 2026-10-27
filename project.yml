@@ -20,12 +20,30 @@ targets:
       - path: Wooper
         excludes:
           - "Secrets.example.swift"
+      - path: Vendor/melonds/src/libretro/libretro-common/compat/compat_strl.c
+      - path: Vendor/melonds/src/libretro/libretro-common/compat/fopen_utf8.c
+      - path: Vendor/melonds/src/libretro/libretro-common/compat/compat_posix_string.c
+      - path: Vendor/melonds/src/libretro/libretro-common/compat/compat_strcasestr.c
+      - path: Vendor/melonds/src/libretro/libretro-common/encodings/encoding_utf.c
+      - path: Vendor/melonds/src/libretro/libretro-common/file/file_path.c
+      - path: Vendor/melonds/src/libretro/libretro-common/streams/file_stream.c
+      - path: Vendor/melonds/src/libretro/libretro-common/streams/file_stream_transforms.c
+      - path: Vendor/melonds/src/libretro/libretro-common/string/stdstring.c
+      - path: Vendor/melonds/src/libretro/libretro-common/vfs/vfs_implementation.c
+      - path: DSCore
+        excludes:
+          - "*.a"
+          - "MELONDS-LICENSE"
       - path: Shared
       - path: PaperyShared
         excludes:
           - "PaperyConfig.example.swift"
     settings:
       base:
+        SWIFT_OBJC_BRIDGING_HEADER: DSCore/DSCore.h
+        CLANG_CXX_LANGUAGE_STANDARD: "c++17"
+        HEADER_SEARCH_PATHS: "$(SRCROOT)/Vendor/melonds/src/libretro/libretro-common/include"
+        OTHER_LDFLAGS: "$(inherited) $(SRCROOT)/DSCore/libmelonds.a -lc++"
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "Wooper needs microphone access to record voice memos."
@@ -41,6 +59,8 @@ targets:
       properties:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
         UIBackgroundModes:
           - audio
           - bluetooth-central

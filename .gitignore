@@ -24,3 +24,10 @@ Package.resolved
 
 # Papery token (local only)
 PaperyShared/PaperyConfig.swift
+
+# Rebuilt from pinned melonDS sources
+DSCore/*.a
+# Imported games and console firmware stay local
+*.nds
+*.sav
+*.state

@@ -10,7 +10,11 @@ struct AppShell: View {
     @Environment(\.modelContext) private var modelContext
     private var recorder = AudioRecorderService.shared
 
-    enum Tab { case papery, record, home }
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @State private var ds = DSModel()
+    private var supportsDS: Bool { Self.isDuo && sizeClass == .regular }
+
+    enum Tab { case papery, record, home, ds }
     @State private var selectedTab: Tab = .papery
 
     // Hardware identifier observed on the user's Duo ("flippy").
@@ -34,6 +38,12 @@ struct AppShell: View {
                 .tabItem { Label("Record", systemImage: "waveform") }
                 .tag(Tab.record)
 
+            if #available(iOS 27.1, *), supportsDS {
+                DSView(model: ds)
+                    .tabItem { Label("DS", systemImage: "gamecontroller.fill") }
+                    .tag(Tab.ds)
+            }
+
             if !Self.isDuo {
                 HomeControlView()
                     .tabItem { Label("Home", systemImage: "lightbulb.fill") }
@@ -42,6 +52,10 @@ struct AppShell: View {
         }
         .modifier(AdaptiveNavigationStyle())
         .tint(Color.paperyInk)
+        .onChange(of: supportsDS) { _, supported in
+            if !supported { ds.pause(); if selectedTab == .ds { selectedTab = .papery } }
+        }
+        .onChange(of: selectedTab) { _, tab in if tab != .ds { ds.pause() } }
         .onReceive(NotificationCenter.default.publisher(for: .startRecordingIntent)) { _ in
             selectedTab = .record
             if !recorder.isRecording {

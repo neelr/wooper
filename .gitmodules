@@ -1,0 +1,3 @@
+[submodule "Vendor/melonds"]
+	path = Vendor/melonds
+	url = https://github.com/libretro/melonds.git
