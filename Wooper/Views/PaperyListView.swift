@@ -194,12 +194,28 @@ struct PaperyListView: View {
     private var listContent: some View {
         List {
             ForEach(store.papers) { paper in
-                Button {
-                    if let url = URL(string: paper.url) { openURL(url) }
-                } label: {
-                    PaperRow(paper: paper, roomyPreview: largePreviews && horizontalSizeClass == .regular)
+                HStack(spacing: 8) {
+                    Button {
+                        if let url = URL(string: paper.url) { openURL(url) }
+                    } label: {
+                        PaperRow(paper: paper, roomyPreview: largePreviews && horizontalSizeClass == .regular)
+                    }
+                    .buttonStyle(.plain)
+
+                    if largePreviews && horizontalSizeClass == .regular {
+                        Button {
+                            Task { await store.toggleRead(paper) }
+                        } label: {
+                            Image(systemName: paper.isRead ? "checkmark.circle.fill" : "checkmark.circle")
+                                .foregroundStyle(.secondary)
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(paper.isRead ? "Mark unread" : "Mark read")
+                        .help(paper.isRead ? "Mark unread" : "Mark read")
+                    }
                 }
-                .buttonStyle(.plain)
                 .listRowBackground(Color.paperyBg)
                 .listRowSeparatorTint(Color.paperyMeta.opacity(0.3))
                 .swipeActions(edge: .leading, allowsFullSwipe: true) {
