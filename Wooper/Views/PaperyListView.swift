@@ -86,7 +86,7 @@ final class PaperyStore {
 
 struct PaperyListView: View {
     var largePreviews = false
-    @State private var availableWidth: CGFloat = 0
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var store = PaperyStore()
     @Environment(\.openURL) private var openURL
 
@@ -111,7 +111,6 @@ struct PaperyListView: View {
                 }
             }
             .background(Color.paperyBg.ignoresSafeArea())
-            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { availableWidth = $0 }
             .navigationTitle("papery")
             .toolbarTitleDisplayMode(.inlineLarge)
             .toolbarBackground(Color.paperyBg, for: .navigationBar)
@@ -161,7 +160,7 @@ struct PaperyListView: View {
                 Button {
                     if let url = URL(string: paper.url) { openURL(url) }
                 } label: {
-                    PaperRow(paper: paper, largePreview: largePreviews, wideLayout: availableWidth >= 540)
+                    PaperRow(paper: paper, roomyPreview: largePreviews && horizontalSizeClass == .regular)
                 }
                 .buttonStyle(.plain)
                 .listRowBackground(Color.paperyBg)
@@ -205,23 +204,16 @@ struct PaperyListView: View {
 
 struct PaperRow: View {
     let paper: Paper
-    var largePreview = false
-    var wideLayout = false
+    var roomyPreview = false
 
     var body: some View {
-        let layout = largePreview && !wideLayout
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
-            : AnyLayout(HStackLayout(alignment: .top, spacing: largePreview ? 24 : 8))
-        layout {
-            if largePreview {
-                PaperThumb(url: paper.url, width: wideLayout ? 220 : 180, height: wideLayout ? 165 : 135)
-            }
-            VStack(alignment: .leading, spacing: largePreview ? 10 : 3) {
+        HStack(alignment: .top, spacing: roomyPreview ? 12 : 8) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(paper.displayTitle)
-                    .font(.system(largePreview ? .title3 : .subheadline, design: .monospaced))
+                    .font(.system(.subheadline, design: .monospaced))
                     .foregroundStyle(paper.isRead ? Color.paperyMeta : Color.paperyInk)
                     .strikethrough(paper.isRead, color: .paperyMeta)
-                    .lineLimit(largePreview ? 4 : 2)
+                    .lineLimit(2)
 
                 HStack(spacing: 5) {
                     if let site = paper.site, !site.isEmpty {
@@ -237,12 +229,12 @@ struct PaperRow: View {
                             .foregroundStyle(Color.paperyHlText)
                     }
                 }
-                .font(.system(largePreview ? .caption : .caption2, design: .monospaced))
+                .font(.system(.caption2, design: .monospaced))
                 .foregroundStyle(Color.paperyMeta)
                 .lineLimit(1)
             }
 
-            if !largePreview || wideLayout { Spacer(minLength: 8) }
+            Spacer(minLength: 8)
 
             if paper.isLiked {
                 Image(systemName: "heart.fill")
@@ -250,9 +242,9 @@ struct PaperRow: View {
                     .foregroundStyle(Color.paperyHeart)
             }
 
-            if !largePreview { PaperThumb(url: paper.url) }
+            PaperThumb(url: paper.url, width: roomyPreview ? 96 : 64, height: roomyPreview ? 72 : 48)
         }
-        .padding(.vertical, largePreview ? 18 : 4)
+        .padding(.vertical, 4)
         .contentShape(Rectangle())
     }
 }
