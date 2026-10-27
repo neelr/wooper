@@ -98,7 +98,8 @@ struct PaperyListView: View {
             if largePreviews && horizontalSizeClass == .regular {
                 NavigationSplitView(columnVisibility: $columnVisibility) {
                     CuriusFeedView(store: feed)
-                        .navigationSplitViewColumnWidth(min: 200, ideal: 260, max: 320)
+                        .toolbar(removing: .sidebarToggle)
+                        .navigationSplitViewColumnWidth(min: 240, ideal: 320, max: 380)
                 } detail: {
                     readingList
                 }

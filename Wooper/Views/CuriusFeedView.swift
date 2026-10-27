@@ -46,72 +46,70 @@ final class CuriusFeedStore {
 struct CuriusFeedView: View {
     @Bindable var store: CuriusFeedStore
     @Environment(\.openURL) private var openURL
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
-        List {
-            if let error = store.error {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(error).font(.caption).foregroundStyle(.secondary)
-                    Button("Retry") { Task { await store.load(refresh: store.items.isEmpty) } }
-                }
-            }
-            if store.loaded && store.items.isEmpty && store.error == nil {
-                Text("Nothing new in your feed.").font(.subheadline).foregroundStyle(.secondary)
-            }
-            ForEach(Array(store.items.enumerated()), id: \.element.id) { index, item in
-                VStack(alignment: .leading, spacing: 5) {
-                    if index == 0 || store.items[index - 1].day != item.day {
-                        Text(item.day.uppercased())
-                            .font(.system(.caption2, design: .monospaced).weight(.semibold))
-                            .foregroundStyle(.secondary).padding(.top, 8)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 14) {
+                if let error = store.error {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(error).font(.caption).foregroundStyle(.secondary)
+                        Button("Retry") { Task { await store.load(refresh: store.items.isEmpty) } }
                     }
-                    HStack(alignment: .top, spacing: 4) {
-                        Button {
-                            if let url = URL(string: item.url) { openURL(url) }
-                        } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(item.title.isEmpty ? item.url : item.title)
-                                    .font(.system(.subheadline, design: .monospaced)).lineLimit(2)
-                                    .foregroundStyle(Color.paperyInk)
-                                Text(item.metadata).font(.system(.caption2, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
+                }
+                if store.loaded && store.items.isEmpty && store.error == nil {
+                    Text("Nothing new in your feed.").font(.subheadline).foregroundStyle(.secondary)
+                }
+                ForEach(Array(store.items.enumerated()), id: \.element.id) { index, item in
+                    VStack(alignment: .leading, spacing: 5) {
+                        if index == 0 || store.items[index - 1].day != item.day {
+                            Text(item.day)
+                                .font(.caption)
+                                .foregroundStyle(.tertiary).padding(.top, index == 0 ? 0 : 12)
+                        }
+                        HStack(alignment: .top, spacing: 4) {
+                            Button {
+                                if let url = URL(string: item.url) { openURL(url) }
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(item.title.isEmpty ? item.url : item.title)
+                                        .font(horizontalSizeClass == .regular ? .body : .subheadline).lineLimit(3)
+                                        .foregroundStyle(Color.paperyInk)
+                                    Text(item.metadata).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
+                            .buttonStyle(.plain)
+                            Button {
+                                Task { await store.save(item) }
+                            } label: {
+                                Image(systemName: item.saved ? "checkmark" : "plus")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 44, height: 44)
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(item.saved || store.saving.contains(item.id))
+                            .accessibilityLabel(item.saved ? "Already in Papery" : "Save to Papery")
                         }
-                        .buttonStyle(.plain)
-                        Button {
-                            Task { await store.save(item) }
-                        } label: {
-                            Image(systemName: item.saved ? "checkmark" : "plus")
-                                .frame(width: 44, height: 44)
-                        }
-                        .buttonStyle(.borderless)
-                        .disabled(item.saved || store.saving.contains(item.id))
-                        .accessibilityLabel(item.saved ? "Already in Papery" : "Save to Papery")
                     }
                 }
-                .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 4))
-                .listRowSeparatorTint(Color.paperyMeta.opacity(0.3))
-                .listRowBackground(Color.paperyBg)
+                if store.loaded, let next = store.next, store.error == nil {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .task(id: next) { await store.load() }
+                } else if store.loading {
+                    ProgressView().frame(maxWidth: .infinity)
+                }
             }
-            if store.loading {
-                HStack { Spacer(); ProgressView(); Spacer() }
-            } else if store.next != nil && store.loaded {
-                Button("Load older items") { Task { await store.load() } }
-            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
         .background(Color.paperyBg)
         .navigationTitle("curius")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { Task { await store.load(refresh: true) } } label: {
-                    Label("Refresh feed", systemImage: "arrow.clockwise")
-                }.disabled(store.loading)
-            }
-        }
         .refreshable { await store.load(refresh: true) }
         .task { if !store.loaded { await store.load() } }
     }
