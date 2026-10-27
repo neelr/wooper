@@ -88,9 +88,38 @@ struct PaperyListView: View {
     var largePreviews = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var store = PaperyStore()
+    @State private var feed = CuriusFeedStore()
+    @State private var feedPresented = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @Environment(\.openURL) private var openURL
 
     var body: some View {
+        Group {
+            if largePreviews && horizontalSizeClass == .regular {
+                NavigationSplitView(columnVisibility: $columnVisibility) {
+                    CuriusFeedView(store: feed)
+                        .navigationSplitViewColumnWidth(min: 200, ideal: 260, max: 320)
+                } detail: {
+                    readingList
+                }
+                .navigationSplitViewStyle(.balanced)
+            } else {
+                readingList
+            }
+        }
+        .sheet(isPresented: $feedPresented) {
+            NavigationStack {
+                CuriusFeedView(store: feed)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Done") { feedPresented = false }
+                        }
+                    }
+            }
+        }
+    }
+
+    private var readingList: some View {
         NavigationStack {
             Group {
                 if let error = store.errorMessage, store.papers.isEmpty {
@@ -115,6 +144,13 @@ struct PaperyListView: View {
             .toolbarTitleDisplayMode(.inlineLarge)
             .toolbarBackground(Color.paperyBg, for: .navigationBar)
             .toolbar {
+                if largePreviews && horizontalSizeClass != .regular {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { feedPresented = true } label: {
+                            Label("Curius feed", systemImage: "person.2.wave.2")
+                        }
+                    }
+                }
                 ToolbarItem(placement: .topBarLeading) {
                     EditButton()
                 }

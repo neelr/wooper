@@ -61,6 +61,14 @@ enum PaperyService {
 
     // MARK: - Reading list
 
+    static func curiusFeed(from: Int) async throws -> CuriusFeedPage {
+        let offset = -TimeZone.current.secondsFromGMT() / 60
+        let data = try await send(try makeRequest("/api/curius/feed?from=\(from)&tz=\(offset)"))
+        struct Response: Decodable { let html: String; let next: Int? }
+        let response = try JSONDecoder().decode(Response.self, from: data)
+        return CuriusFeedPage(items: try CuriusFeedParser.parse(response.html), next: response.next)
+    }
+
     static func list(read: String, liked: Bool, query: String) async throws -> [Paper] {
         var comps = URLComponents(string: base + "/api/papers.json")!
         comps.queryItems = [
