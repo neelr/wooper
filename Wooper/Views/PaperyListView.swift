@@ -234,14 +234,10 @@ struct PaperyListView: View {
                         .help(paper.isRead ? "Mark unread" : "Mark read")
                     }
                 }
-                .modifier(ShortReadSwipe(enabled: largePreviews && horizontalSizeClass == .regular, isRead: paper.isRead) {
-                    Task { await store.toggleRead(paper) }
-                })
                 .moveDisabled(store.filter == .recent)
                 .listRowBackground(Color.paperyBg)
                 .listRowSeparatorTint(Color.paperyMeta.opacity(0.3))
                 .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                    if !(largePreviews && horizontalSizeClass == .regular) {
                     Button {
                         Task { await store.toggleRead(paper) }
                     } label: {
@@ -249,7 +245,6 @@ struct PaperyListView: View {
                               systemImage: paper.isRead ? "circle" : "checkmark.circle")
                     }
                     .tint(.gray)
-                    }
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) {
@@ -326,9 +321,9 @@ struct PaperRow: View {
                     .foregroundStyle(Color.paperyHeart)
             }
 
-            PaperThumb(url: paper.url, width: roomyPreview ? 96 : 64, height: roomyPreview ? 72 : 48)
+            PaperThumb(url: paper.url, width: roomyPreview ? 112 : 64, height: roomyPreview ? 84 : 48)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, roomyPreview ? 8 : 4)
         .contentShape(Rectangle())
     }
 }
@@ -358,71 +353,5 @@ private struct LensStatusBar: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 6)
         .background(Color.paperyBg)
-    }
-}
-
-
-/// Expanded rows use a fixed travel distance rather than a fraction of their width.
-private struct ShortReadSwipe: ViewModifier {
-    let enabled: Bool
-    let isRead: Bool
-    let action: () -> Void
-    @State private var distance: CGFloat = 0
-    @State private var armed = false
-    private let threshold: CGFloat = 72
-
-    func body(content: Content) -> some View {
-        if #available(iOS 18.0, *), enabled {
-            content
-                .offset(x: min(distance, 96))
-                .background(alignment: .leading) {
-                    if distance > 0 {
-                        Image(systemName: isRead ? "circle" : "checkmark.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(armed ? Color.paperyInk : Color.paperyMeta)
-                            .frame(width: min(distance, 72))
-                    }
-                }
-                .contentShape(Rectangle())
-                .gesture(ReadPan { value, ended, cancelled in
-                    distance = max(0, value)
-                    let ready = distance >= threshold
-                    if ready && !armed { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
-                    armed = ready
-                    if ended || cancelled {
-                        let commit = ready && !cancelled
-                        withAnimation(.easeOut(duration: 0.15)) { distance = 0; armed = false }
-                        if commit { action() }
-                    }
-                })
-        } else {
-            content
-        }
-    }
-}
-
-@available(iOS 18.0, *)
-private struct ReadPan: UIGestureRecognizerRepresentable {
-    let changed: (CGFloat, Bool, Bool) -> Void
-
-    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
-    func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
-        let pan = UIPanGestureRecognizer()
-        pan.maximumNumberOfTouches = 1
-        pan.delegate = context.coordinator
-        return pan
-    }
-    func handleUIGestureRecognizerAction(_ recognizer: UIPanGestureRecognizer, context: Context) {
-        changed(recognizer.translation(in: recognizer.view).x,
-                recognizer.state == .ended,
-                recognizer.state == .cancelled || recognizer.state == .failed)
-    }
-    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
-        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-            guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return false }
-            let velocity = pan.velocity(in: pan.view)
-            // Leave vertical scrolling and left-swipe Like/Delete to the List.
-            return velocity.x > 0 && velocity.x > abs(velocity.y) * 1.5
-        }
     }
 }
