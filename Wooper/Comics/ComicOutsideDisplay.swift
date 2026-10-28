@@ -112,7 +112,7 @@ final class ComicArtworkSceneDelegate: NSObject, UIWindowSceneDelegate {
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let scene = scene as? UIWindowScene else { return }
         let window = UIWindow(windowScene: scene)
-        window.rootViewController = UIHostingController(rootView: ComicArtworkView())
+        window.rootViewController = ComicPortraitController(rootView: ComicArtworkView())
         window.makeKeyAndVisible()
         self.window = window
     }

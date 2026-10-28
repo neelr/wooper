@@ -29,13 +29,14 @@ struct AppShell: View {
     }()
 
     var body: some View {
-        Group {
-            if selectedTab == .comics, supportsDS {
-                ComicReaderView(active: true) { selectedTab = .papery }
-            } else {
-                navigationTabs
+        navigationTabs
+            .background {
+                if #available(iOS 27.1, *) {
+                    ComicModePresenter(active: selectedTab == .comics && supportsDS) {
+                        selectedTab = .papery
+                    }
+                }
             }
-        }
         .onChange(of: supportsDS) { _, supported in
             if !supported, selectedTab == .comics { selectedTab = .papery }
         }
