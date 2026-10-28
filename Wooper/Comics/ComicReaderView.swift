@@ -193,7 +193,19 @@ struct ComicModePresenter: UIViewControllerRepresentable {
 }
 
 @available(iOS 27.1, *)
-final class ComicLandscapeController<Content: View>: UIHostingController<Content> {
+final class ComicLandscapeController<Content: View>: UIViewController {
+    private let book: UIHostingController<Content>
+
+    init(rootView: Content) {
+        book = UIHostingController(rootView: rootView)
+        book.safeAreaRegions = []
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @MainActor required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+    override var prefersStatusBarHidden: Bool { true }
+    override var prefersHomeIndicatorAutoHidden: Bool { true }
+
     var providesOutsideArtwork = false
     var onFold: (() -> Void)?
     private var outsideController: ComicOutsideController?
@@ -203,6 +215,11 @@ final class ComicLandscapeController<Content: View>: UIHostingController<Content
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        view.backgroundColor = .white
+        view.clipsToBounds = true
+        addChild(book)
+        view.addSubview(book.view)
+        book.didMove(toParent: self)
         registerForTraitChanges([UITraitHorizontalSizeClass.self]) { (controller: ComicLandscapeController<Content>, _: UITraitCollection) in
             controller.checkFold()
         }
@@ -219,7 +236,23 @@ final class ComicLandscapeController<Content: View>: UIHostingController<Content
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         checkFold()
+        layoutBookOnPhysicalScreen()
         updateOrientationLock()
+    }
+
+    private func layoutBookOnPhysicalScreen() {
+        guard let screen = view.window?.windowScene?.screen else { return }
+        let fixed = screen.fixedCoordinateSpace
+        let origin = fixed.convert(CGPoint.zero, to: view)
+        let xAxis = fixed.convert(CGPoint(x: 1, y: 0), to: view)
+        let physicalAngle = atan2(xAxis.y - origin.y, xAxis.x - origin.x)
+        let size = fixed.bounds.size
+        let landscapeAngle: CGFloat = size.width < size.height ? .pi / 2 : 0
+        UIView.performWithoutAnimation {
+            book.view.bounds = CGRect(x: 0, y: 0, width: max(size.width, size.height), height: min(size.width, size.height))
+            book.view.center = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
+            book.view.transform = CGAffineTransform(rotationAngle: physicalAngle + landscapeAngle)
+        }
     }
 
     private func updateOrientationLock() {
@@ -233,6 +266,7 @@ final class ComicLandscapeController<Content: View>: UIHostingController<Content
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
         super.viewWillTransition(to: size, with: coordinator)
         coordinator.animate(alongsideTransition: nil) { [weak self] _ in
+            self?.layoutBookOnPhysicalScreen()
             self?.updateOrientationLock()
         }
     }
