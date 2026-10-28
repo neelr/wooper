@@ -14,7 +14,7 @@ struct AppShell: View {
     @State private var ds = DSModel()
     private var supportsDS: Bool { Self.isDuo && sizeClass == .regular }
 
-    enum Tab { case papery, record, home, ds }
+    enum Tab { case papery, record, home, ds, comics }
     @State private var selectedTab: Tab = .papery
 
     // Hardware identifier observed on the user's Duo ("flippy").
@@ -55,11 +55,16 @@ struct AppShell: View {
                     .tabItem { Label("Home", systemImage: "lightbulb.fill") }
                     .tag(Tab.home)
             }
+            if #available(iOS 27.1, *), supportsDS {
+                ComicReaderView(active: selectedTab == .comics)
+                    .tabItem { Label("calvin & hobbes", systemImage: "book.pages") }
+                    .tag(Tab.comics)
+            }
         }
         .modifier(AdaptiveNavigationStyle())
         .tint(Color.paperyInk)
         .onChange(of: supportsDS) { _, supported in
-            if !supported { ds.pause(); if selectedTab == .ds { selectedTab = .papery } }
+            if !supported { ds.pause(); if selectedTab == .ds || selectedTab == .comics { selectedTab = .papery } }
         }
         .onChange(of: selectedTab) { _, tab in if tab != .ds { ds.pause() } }
         .onReceive(NotificationCenter.default.publisher(for: .startRecordingIntent)) { _ in

@@ -1,4 +1,8 @@
 name: Wooper
+packages:
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation.git
+    exactVersion: 0.9.20
 options:
   bundleIdPrefix: com.neelr
   deploymentTarget:
@@ -47,6 +51,7 @@ targets:
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "Wooper needs microphone access to record voice memos."
+        INFOPLIST_KEY_NSCameraUsageDescription: "An active camera session lets wooper show book artwork on the Duo's outside screen. No photos or videos are recorded."
         INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: "Wooper syncs your papery reading list to your e-reader over Bluetooth."
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Wooper transcribes your voice memos to save to Notion."
         INFOPLIST_KEY_NSSupportsLiveActivities: YES
@@ -83,6 +88,7 @@ targets:
       properties:
         aps-environment: development
     dependencies:
+      - package: ZIPFoundation
       - target: RecordingActivity
       - target: PaperyShare
 
