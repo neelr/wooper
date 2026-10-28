@@ -90,6 +90,14 @@ struct WooperApp: App {
     var body: some Scene {
         WindowGroup {
             AppShell()
+                .onOpenURL { url in
+                    // Widget links are delivered to the containing app.
+                    // Forward article links to the user's default browser.
+                    guard let scheme = url.scheme?.lowercased(),
+                          ["https", "http"].contains(scheme),
+                          url.host != nil else { return }
+                    UIApplication.shared.open(url)
+                }
         }
         .modelContainer(for: Recording.self)
         .onChange(of: scenePhase) { _, phase in

@@ -117,7 +117,7 @@ private struct CuriusWidgetView: View {
         }
         .buttonStyle(.plain)
         .tint(.secondary)
-        .widgetURL(family == .systemSmall ? visible.first.flatMap { URL(string: $0.url) } : nil)
+        .widgetURL(visible.first.flatMap { URL(string: $0.url) })
     }
 
     private func row(_ item: CuriusFeedItem) -> some View {
