@@ -34,9 +34,11 @@ struct AppShell: View {
                 .tabItem { Label("Papery", systemImage: "books.vertical.fill") }
                 .tag(Tab.papery)
 
-            RecordingListView()
-                .tabItem { Label("Record", systemImage: "waveform") }
-                .tag(Tab.record)
+            if !Self.isDuo {
+                RecordingListView()
+                    .tabItem { Label("Record", systemImage: "waveform") }
+                    .tag(Tab.record)
+            }
 
             if #available(iOS 27.1, *), supportsDS {
                 DSView(model: ds)
@@ -61,7 +63,7 @@ struct AppShell: View {
         }
         .onChange(of: selectedTab) { _, tab in if tab != .ds { ds.pause() } }
         .onReceive(NotificationCenter.default.publisher(for: .startRecordingIntent)) { _ in
-            selectedTab = .record
+            if !Self.isDuo { selectedTab = .record }
             if !recorder.isRecording {
                 recorder.startRecording()
             }
