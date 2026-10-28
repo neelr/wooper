@@ -369,26 +369,22 @@ private struct ShortReadSwipe: ViewModifier {
     let action: () -> Void
     @State private var distance: CGFloat = 0
     @State private var armed = false
-    private let threshold: CGFloat = 88
+    private let threshold: CGFloat = 112
 
     func body(content: Content) -> some View {
         if #available(iOS 18.0, *), enabled {
             content
-                .offset(x: min(distance, 120))
+                .offset(x: min(distance, 144))
                 .background(alignment: .leading) {
                     if distance > 0 {
-                        VStack(spacing: 4) {
-                            Image(systemName: isRead ? "circle" : "checkmark.circle.fill")
-                                .font(.system(size: 28, weight: .medium))
-                            Text(isRead ? "Unread" : "Read")
-                                .font(.system(.caption2, design: .monospaced))
-                        }
-                        .foregroundStyle(armed ? Color.paperyInk : Color.paperyMeta)
-                        .frame(width: 88)
-                        .offset(x: -16 * (1 - min(distance / threshold, 1)))
-                        .opacity(min(distance / 44, 1))
-                        .frame(width: min(distance, 112), alignment: .leading)
-                        .clipped()
+                        Image(systemName: isRead ? "circle" : "checkmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(armed ? Color.paperyInk : Color.paperyMeta)
+                            .frame(width: 112)
+                            .offset(x: -16 * (1 - min(distance / threshold, 1)))
+                            .opacity(min(distance / 44, 1))
+                            .frame(width: min(distance, 136), alignment: .leading)
+                            .clipped()
                     }
                 }
                 .contentShape(Rectangle())
