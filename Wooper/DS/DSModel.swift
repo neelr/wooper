@@ -59,6 +59,7 @@ final class DSModel {
     private let worker = DSWorker()
     private var audio: AVAudioEngine?
     private var resumeAfterLoad = false
+    private var lastOpened = UserDefaults.standard.dictionary(forKey: "ds.lastOpened") as? [String: Double] ?? [:]
     static let root = URL.documentsDirectory.appending(path: "DS")
     static var roms: URL { root.appending(path: "ROMs") }
     static var saves: URL { root.appending(path: "Saves") }
@@ -82,9 +83,25 @@ final class DSModel {
             let titles = (try? JSONDecoder().decode([String: String].self, from: Data(contentsOf: titlesURL))) ?? [:]
             games = try FileManager.default.contentsOfDirectory(at: Self.roms, includingPropertiesForKeys: nil)
                 .filter { $0.pathExtension.lowercased() == "nds" }
-                .map { DSGame(url: $0, title: titles[$0.lastPathComponent] ?? $0.deletingPathExtension().lastPathComponent) }
-                .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+                .map { DSGame(url: $0, title: (titles[$0.lastPathComponent] ?? $0.deletingPathExtension().lastPathComponent).lowercased()) }
+            sortLibrary()
         } catch { self.error = error.localizedDescription }
+    }
+
+    private func sortLibrary() {
+        games.sort {
+            let left = lastOpened[$0.id] ?? 0
+            let right = lastOpened[$1.id] ?? 0
+            if left != right { return left > right }
+            let order = $0.title.localizedStandardCompare($1.title)
+            return order == .orderedSame ? $0.id < $1.id : order == .orderedAscending
+        }
+    }
+
+    private func recordOpened(_ game: DSGame) {
+        lastOpened[game.id] = Date().timeIntervalSince1970
+        UserDefaults.standard.set(lastOpened, forKey: "ds.lastOpened")
+        sortLibrary()
     }
 
     /// Local maintenance requests let the desktop manage the library without changing save identities.
@@ -171,7 +188,10 @@ final class DSModel {
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.busy = false
-                if loaded { if self.resumeAfterLoad { self.resume() } }
+                if loaded {
+                    self.recordOpened(game)
+                    if self.resumeAfterLoad { self.resume() }
+                }
                 else { self.error = "The emulator could not load this ROM."; self.game = nil }
             }
         }
