@@ -40,6 +40,12 @@ import ZIPFoundation
         let encoded = try JSONEncoder().encode(books)
         let decoded = try JSONDecoder().decode([ComicBook].self, from: encoded)
         check(decoded.flatMap(\.pages) == books.flatMap(\.pages))
+        let legacy = Data("{\"id\":\"legacy\",\"title\":\"legacy\",\"pages\":[]}".utf8)
+        check(try JSONDecoder().decode(ComicBook.self, from: legacy).coverFile == nil)
+        var covered = books[0]
+        covered.coverFile = "covers/test.png"
+        let coveredData = try JSONEncoder().encode(covered)
+        check(try JSONDecoder().decode(ComicBook.self, from: coveredData).coverFile == "covers/test.png")
         let bad = root.appendingPathComponent("broken.pdf")
         try Data("not a pdf".utf8).write(to: bad)
         let before = try fm.contentsOfDirectory(atPath: library.path).sorted()

@@ -19,10 +19,16 @@ final class ComicLibrary {
     }
 
     init() {
+        reload()
+    }
+
+    func reload() {
+        guard !importing else { return }
         let manifest = Self.root.appending(path: "library.json")
         books = (try? JSONDecoder().decode([ComicBook].self, from: Data(contentsOf: manifest))) ?? []
         if let last = UserDefaults.standard.string(forKey: "comics.lastPage"),
            let index = pages.firstIndex(where: { $0.id == last }) { pageIndex = index }
+        else { pageIndex = 0 }
     }
 
     func turn(to index: Int) {
@@ -65,13 +71,20 @@ final class ComicLibrary {
 actor ComicRenderer {
     static let shared = ComicRenderer()
     private let cache = NSCache<NSString, UIImage>()
-    init() { cache.totalCostLimit = 64 * 1024 * 1024 }
+    private let documents = NSCache<NSString, PDFDocument>()
+    init() {
+        cache.totalCostLimit = 64 * 1024 * 1024
+        documents.countLimit = 2
+    }
     func image(for page: ComicPage) -> UIImage? {
         if let cached = cache.object(forKey: page.id as NSString) { return cached }
         let url = ComicLibrary.root.appending(path: page.file)
         let image: UIImage?
         if let index = page.pdfPage {
-            image = PDFDocument(url: url)?.page(at: index)?.thumbnail(of: CGSize(width: 1600, height: 2000), for: .cropBox)
+            let key = url.path as NSString
+            let document = documents.object(forKey: key) ?? PDFDocument(url: url)
+            if let document { documents.setObject(document, forKey: key) }
+            image = document?.page(at: index)?.thumbnail(of: CGSize(width: 1600, height: 2000), for: .cropBox)
         } else if let source = CGImageSourceCreateWithURL(url as CFURL, nil),
                   let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                     kCGImageSourceCreateThumbnailFromImageAlways: true,

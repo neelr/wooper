@@ -13,6 +13,7 @@ struct ComicBook: Codable, Identifiable {
     let id: String
     let title: String
     let pages: [ComicPage]
+    var coverFile: String? = nil
 }
 
 enum ComicImportError: LocalizedError {

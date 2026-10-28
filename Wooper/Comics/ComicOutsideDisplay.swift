@@ -124,6 +124,14 @@ private struct ComicArtworkView: View {
     var body: some View {
         ZStack {
             Color(red: 0.97, green: 0.95, blue: 0.87).ignoresSafeArea()
+            if let cover = library.currentBook?.coverFile {
+                GeometryReader { geometry in
+                    ComicPageImage(page: ComicPage(file: cover), fill: true)
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .clipped()
+                }
+                .ignoresSafeArea()
+            } else {
             VStack(spacing: 20) {
                 Text("calvin & hobbes")
                     .font(.system(size: 30, weight: .semibold, design: .serif))
@@ -138,6 +146,7 @@ private struct ComicArtworkView: View {
             }
             .padding(28)
             .foregroundStyle(Color(red: 0.22, green: 0.20, blue: 0.15))
+            }
         }
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
