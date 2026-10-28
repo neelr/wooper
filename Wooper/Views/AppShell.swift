@@ -29,6 +29,19 @@ struct AppShell: View {
     }()
 
     var body: some View {
+        Group {
+            if selectedTab == .comics, supportsDS {
+                ComicReaderView(active: true) { selectedTab = .papery }
+            } else {
+                navigationTabs
+            }
+        }
+        .onChange(of: supportsDS) { _, supported in
+            if !supported, selectedTab == .comics { selectedTab = .papery }
+        }
+    }
+
+    private var navigationTabs: some View {
         TabView(selection: $selectedTab) {
             PaperyListView(largePreviews: Self.isDuo)
                 .tabItem { Label("Papery", systemImage: "books.vertical.fill") }
@@ -56,7 +69,7 @@ struct AppShell: View {
                     .tag(Tab.home)
             }
             if #available(iOS 27.1, *), supportsDS {
-                ComicReaderView(active: selectedTab == .comics)
+                Color.clear
                     .tabItem { Label("calvin & hobbes", systemImage: "book.pages") }
                     .tag(Tab.comics)
             }

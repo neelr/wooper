@@ -3,85 +3,42 @@ import UniformTypeIdentifiers
 
 struct ComicReaderView: View {
     var active: Bool
+    var onBack: () -> Void = {}
     @State private var library = ComicLibrary.shared
-    @State private var importing = false
-    @AppStorage("comics.outsideArtwork") private var outsideArtwork = true
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if library.pages.isEmpty {
-                    ContentUnavailableView {
-                        Label("calvin & hobbes", systemImage: "book.pages")
-                    } description: {
-                        Text("Add your comic books to start reading. PDF, CBZ, and images are supported.")
-                    } actions: {
-                        Button("add comics") { importing = true }
-                    }
-                } else {
-                    ComicPageCurl(library: library)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 12)
-                        .background(Color(red: 0.77, green: 0.72, blue: 0.62))
-                }
+        ZStack(alignment: .bottomLeading) {
+            Color.white.ignoresSafeArea()
+            if library.pages.isEmpty {
+                ContentUnavailableView("calvin & hobbes", systemImage: "book.closed", description: Text("Your comics will appear here."))
+            } else {
+                ComicPageCurl(library: library)
+                    .padding(.bottom, 34)
             }
-            .navigationTitle("calvin & hobbes")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Menu {
-                        ForEach(library.books) { book in
-                            Button(book.title) { library.open(book) }
-                        }
-                        Toggle("outside artwork", isOn: $outsideArtwork)
-                    } label: { Label("books", systemImage: "books.vertical") }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { importing = true } label: { Label("add comics", systemImage: "plus") }
-                        .disabled(library.importing)
-                }
+            Button(action: onBack) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                VStack(spacing: 4) {
-                    if let error = library.error {
-                        HStack {
-                            Text(error)
-                            Button("dismiss") { library.error = nil }
-                        }
-                    }
-                    if !library.pages.isEmpty {
-                        Text("\(library.currentBook?.title ?? "") · \(library.pageIndex + 1) / \(library.pages.count)")
-                            .lineLimit(1)
-                    }
-                    if outsideArtwork, let status = library.outsideStatus { Text(status) }
-                }
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .padding(8)
-                .frame(maxWidth: .infinity)
-                .background(Color(red: 0.97, green: 0.95, blue: 0.89))
-            }
-            .overlay {
-                if library.importing {
-                    ProgressView("adding comics…").padding(20).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-                }
-            }
-            .background {
-                if #available(iOS 27.1, *) {
-                    ComicOutsideBridge(active: active && scenePhase == .active && outsideArtwork)
-                        .frame(width: 0, height: 0)
-                }
-            }
-            .fileImporter(isPresented: $importing, allowedContentTypes: [.pdf, .image, .zip, UTType(filenameExtension: "cbz") ?? .data], allowsMultipleSelection: true) { result in
-                switch result {
-                case .success(let urls): library.add(urls)
-                case .failure(let error): library.error = error.localizedDescription
-                }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Back to Papery")
+            .padding(.leading, 8)
+        }
+        .statusBarHidden()
+        .persistentSystemOverlays(.hidden)
+        .background {
+            if #available(iOS 27.1, *) {
+                ComicOutsideBridge(active: active && scenePhase == .active)
+                    .frame(width: 0, height: 0)
             }
         }
-        .tint(Color.paperyInk)
-        .task { library.reload() }
+        .task { if active { library.reload(); library.openRandomSpread() } }
+        .onChange(of: active) { _, active in
+            if active { library.reload(); library.openRandomSpread() }
+        }
     }
 }
 
@@ -111,9 +68,9 @@ private struct ComicLeaf: View {
     @State private var showingDetail = false
     var body: some View {
         ZStack {
-            Color(red: 0.99, green: 0.98, blue: 0.94)
+            Color.white
             if let page {
-                ComicPageImage(page: page).padding(12)
+                ComicPageImage(page: page).padding(6)
                     .accessibilityLabel("comic page \(number + 1)")
             }
             HStack(spacing: 0) {

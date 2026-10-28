@@ -37,6 +37,16 @@ final class ComicLibrary {
         UserDefaults.standard.set(pages[index].id, forKey: "comics.lastPage")
     }
 
+    func openRandomSpread() {
+        guard !pages.isEmpty else { return }
+        let spreadCount = (pages.count + 1) / 2
+        var spread = Int.random(in: 0..<spreadCount)
+        if spreadCount > 1, spread == pageIndex / 2 {
+            spread = (spread + Int.random(in: 1..<spreadCount)) % spreadCount
+        }
+        turn(to: spread * 2)
+    }
+
     func open(_ book: ComicBook) {
         guard let first = book.pages.first, let index = pages.firstIndex(of: first) else { return }
         turn(to: index)
