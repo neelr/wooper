@@ -8,6 +8,7 @@ struct DSView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var importing = false
     @State private var about = false
+    @State private var heldButtons: Set<UInt32> = []
     private let shell = Color(red: 0.62, green: 0.83, blue: 0.90)
     private let controlInk = Color(red: 0.19, green: 0.39, blue: 0.46)
 
@@ -65,7 +66,9 @@ struct DSView: View {
                 switch result { case .success(let urls): model.importROMs(urls); case .failure(let error): model.error = error.localizedDescription }
             }
             .onAppear { model.refreshLibrary() }
-            .onDisappear { model.pause() }
+            .onDisappear { releaseButtons(); model.pause() }
+            .onChange(of: model.paused) { _, paused in if paused { releaseButtons() } }
+            .onChange(of: model.busy) { _, busy in if busy { releaseButtons() } }
             .onChange(of: scenePhase) { _, phase in if phase != .active { model.pause() } else { model.refreshLibrary() } }
             .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { _ in model.pause() }
         }
@@ -191,6 +194,17 @@ struct DSView: View {
         .frame(width: 132, height: 132)
     }
 
+    private func pressButton(_ id: UInt32) {
+        guard !model.paused, !model.busy, heldButtons.insert(id).inserted else { return }
+        DSControlHaptics.click()
+        ds_button(id, true)
+    }
+
+    private func releaseButtons() {
+        for id in heldButtons { ds_button(id, false) }
+        heldButtons.removeAll()
+    }
+
     private func pad(_ title: String, _ id: UInt32) -> some View {
         Text(title)
             .font(.system(size: title.count > 2 ? 9 : 16, weight: .bold, design: .monospaced))
@@ -208,10 +222,14 @@ struct DSView: View {
             }
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
-                .onChanged { _ in if !model.paused { ds_button(id, true) } }
-                .onEnded { _ in ds_button(id, false) })
+                .onChanged { _ in pressButton(id) }
+                .onEnded { _ in heldButtons.remove(id); ds_button(id, false) })
             .accessibilityLabel(title).accessibilityAddTraits(.isButton)
-            .accessibilityAction { ds_button(id, true); DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { ds_button(id, false) } }
+            .accessibilityAction {
+                guard !model.paused, !model.busy else { return }
+                pressButton(id)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { heldButtons.remove(id); ds_button(id, false) }
+            }
     }
 }
 
@@ -344,6 +362,7 @@ private struct DSDirectionalPad: View {
             if abs(x) > abs(y) * 0.4142 { next.insert(x < 0 ? 6 : 7) }
             if abs(y) > abs(x) * 0.4142 { next.insert(y < 0 ? 4 : 5) }
         }
+        if !next.isEmpty, next != pressed { DSControlHaptics.click() }
         for id in pressed.subtracting(next) { ds_button(id, false) }
         for id in next.subtracting(pressed) { ds_button(id, true) }
         pressed = next
@@ -356,7 +375,19 @@ private struct DSDirectionalPad: View {
 
     private func tap(_ id: UInt32) {
         guard enabled else { return }
+        DSControlHaptics.click()
         ds_button(id, true)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { ds_button(id, false) }
+    }
+}
+
+
+@MainActor
+private enum DSControlHaptics {
+    private static let impact = UIImpactFeedbackGenerator(style: .light)
+
+    static func click() {
+        impact.impactOccurred(intensity: 0.65)
+        impact.prepare()
     }
 }
