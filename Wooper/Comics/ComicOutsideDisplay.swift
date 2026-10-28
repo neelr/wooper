@@ -113,11 +113,54 @@ final class ComicArtworkSceneDelegate: NSObject, UIWindowSceneDelegate {
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let scene = scene as? UIWindowScene else { return }
         let window = UIWindow(windowScene: scene)
-        window.rootViewController = ComicPortraitController(rootView: ComicArtworkView())
+        window.rootViewController = ComicArtworkController()
         window.makeKeyAndVisible()
         self.window = window
     }
     func sceneDidDisconnect(_ scene: UIScene) { window = nil }
+}
+
+/// Anchor the cover to the display's physical portrait coordinates even when
+/// the system rotates a camera accessory scene independently of the reader.
+@available(iOS 27.1, *)
+private final class ComicArtworkController: UIViewController {
+    private let artwork = UIHostingController(rootView: ComicArtworkView())
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .portrait }
+    override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation { .portrait }
+    override var prefersInterfaceOrientationLocked: Bool { true }
+    override var childForInterfaceOrientationLock: UIViewController? { nil }
+    override var prefersStatusBarHidden: Bool { true }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .white
+        view.clipsToBounds = true
+        addChild(artwork)
+        view.addSubview(artwork.view)
+        artwork.didMove(toParent: self)
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        setNeedsUpdateOfSupportedInterfaceOrientations()
+        setNeedsUpdateOfPrefersInterfaceOrientationLocked()
+        view.window?.windowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+        view.setNeedsLayout()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        guard let screen = view.window?.windowScene?.screen else { return }
+        let fixed = screen.fixedCoordinateSpace
+        let origin = fixed.convert(CGPoint.zero, to: view)
+        let xAxis = fixed.convert(CGPoint(x: 1, y: 0), to: view)
+        let angle = atan2(xAxis.y - origin.y, xAxis.x - origin.x)
+        UIView.performWithoutAnimation {
+            artwork.view.bounds = CGRect(origin: .zero, size: fixed.bounds.size)
+            artwork.view.center = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
+            artwork.view.transform = CGAffineTransform(rotationAngle: angle)
+        }
+    }
 }
 
 private struct ComicArtworkView: View {
