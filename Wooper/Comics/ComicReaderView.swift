@@ -211,13 +211,13 @@ final class ComicLandscapeController<Content: View>: UIViewController {
     private var outsideController: ComicOutsideController?
     private var observers: [NSObjectProtocol] = []
     private var exiting = false
-    private var orientationLocked = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .white
         view.clipsToBounds = true
         addChild(book)
+        book.view.isHidden = true
         view.addSubview(book.view)
         book.didMove(toParent: self)
         registerForTraitChanges([UITraitHorizontalSizeClass.self]) { (controller: ComicLandscapeController<Content>, _: UITraitCollection) in
@@ -237,7 +237,6 @@ final class ComicLandscapeController<Content: View>: UIViewController {
         super.viewDidLayoutSubviews()
         checkFold()
         layoutBookOnPhysicalScreen()
-        updateOrientationLock()
     }
 
     private func layoutBookOnPhysicalScreen() {
@@ -252,22 +251,20 @@ final class ComicLandscapeController<Content: View>: UIViewController {
             book.view.bounds = CGRect(x: 0, y: 0, width: max(size.width, size.height), height: min(size.width, size.height))
             book.view.center = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
             book.view.transform = CGAffineTransform(rotationAngle: physicalAngle + landscapeAngle)
+            book.view.isHidden = false
         }
     }
 
-    private func updateOrientationLock() {
-        guard let scene = view.window?.windowScene else { return }
-        let ready = scene.effectiveGeometry.interfaceOrientation == .landscapeRight
-        guard orientationLocked != ready else { return }
-        orientationLocked = ready
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
         setNeedsUpdateOfPrefersInterfaceOrientationLocked()
+        view.setNeedsLayout()
     }
 
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
         super.viewWillTransition(to: size, with: coordinator)
         coordinator.animate(alongsideTransition: nil) { [weak self] _ in
             self?.layoutBookOnPhysicalScreen()
-            self?.updateOrientationLock()
         }
     }
 
@@ -280,7 +277,7 @@ final class ComicLandscapeController<Content: View>: UIViewController {
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .landscapeRight }
     override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation { .landscapeRight }
-    override var prefersInterfaceOrientationLocked: Bool { orientationLocked }
+    override var prefersInterfaceOrientationLocked: Bool { true }
     override var childForInterfaceOrientationLock: UIViewController? { nil }
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
@@ -306,15 +303,9 @@ final class ComicLandscapeController<Content: View>: UIViewController {
                 })
             }
         }
-        // Locking before requesting geometry pins the orientation we entered in.
-        // Let UIKit rotate first, then lock only the confirmed landscape geometry.
-        updateOrientationLock()
+        // The physical canvas sets the book direction, so the scene can stay
+        // locked from presentation onward without an unlocked rotation window.
         setNeedsUpdateOfSupportedInterfaceOrientations()
         setNeedsUpdateOfPrefersInterfaceOrientationLocked()
-        DispatchQueue.main.async { [weak self] in
-            guard let self, !self.exiting, let scene = self.view.window?.windowScene else { return }
-            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))
-            self.updateOrientationLock()
-        }
     }
 }
