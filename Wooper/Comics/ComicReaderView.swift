@@ -246,7 +246,7 @@ final class ComicLandscapeController<Content: View>: UIViewController {
         let xAxis = fixed.convert(CGPoint(x: 1, y: 0), to: view)
         let physicalAngle = atan2(xAxis.y - origin.y, xAxis.x - origin.x)
         let size = fixed.bounds.size
-        let landscapeAngle: CGFloat = size.width < size.height ? .pi / 2 : 0
+        let landscapeAngle: CGFloat = size.width < size.height ? -.pi / 2 : .pi
         UIView.performWithoutAnimation {
             book.view.bounds = CGRect(x: 0, y: 0, width: max(size.width, size.height), height: min(size.width, size.height))
             book.view.center = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
