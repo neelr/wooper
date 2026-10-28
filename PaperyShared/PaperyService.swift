@@ -98,6 +98,25 @@ enum PaperyService {
         try await send(try makeRequest("/api/toggle-like/\(id)", method: "POST"))
     }
 
+    static func curiusLibrary() async throws -> Set<String> {
+        let data = try await send(try makeRequest("/api/curius/library"))
+        struct Response: Decodable { let configured: Bool; let urls: [String: Int] }
+        let response = try JSONDecoder().decode(Response.self, from: data)
+        return response.configured ? Set(response.urls.keys.map(curiusURLKey)) : []
+    }
+
+    static func curiusURLKey(_ raw: String) -> String {
+        var components = URLComponents(string: raw)
+        components?.fragment = nil
+        let scheme = components?.scheme?.lowercased()
+        let host = components?.host?.lowercased()
+        components?.scheme = scheme
+        components?.host = host
+        var key = components?.string ?? String(raw.split(separator: "#", maxSplits: 1).first ?? "")
+        if key.hasSuffix("/") { key.removeLast() }
+        return key
+    }
+
     static func crossPostToCurius(url: String, title: String) async throws {
         let data = try await send(try makeRequest("/api/curius/save", method: "POST",
                                                   body: ["url": url, "title": title]))

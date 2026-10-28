@@ -24,6 +24,8 @@ final class PaperyStore {
     var isLoading = false
     var errorMessage: String?
     var loadedOnce = false
+    var curiusURLs: Set<String> = []
+    private var curiusRevision = 0
     private var loadGeneration = 0
     private var statusChanges: [String: PaperStatusChange] = {
         guard let data = UserDefaults.standard.data(forKey: "papery.statusChanges") else { return [:] }
@@ -32,6 +34,22 @@ final class PaperyStore {
 
     func statusChange(for paper: Paper) -> PaperStatusChange? {
         paper.latestStatusChange(local: statusChanges[String(paper.id)])
+    }
+
+    func isReposted(_ paper: Paper) -> Bool {
+        curiusURLs.contains(PaperyService.curiusURLKey(paper.url))
+    }
+
+    func rememberRepost(_ paper: Paper) {
+        curiusRevision += 1
+        curiusURLs.insert(PaperyService.curiusURLKey(paper.url))
+    }
+
+    @MainActor
+    func refreshCurius() async {
+        let revision = curiusRevision
+        guard let urls = try? await PaperyService.curiusLibrary(), revision == curiusRevision else { return }
+        curiusURLs = urls
     }
 
     private func remember(_ paper: Paper, kind: PaperStatusChange.Kind) {
@@ -67,6 +85,7 @@ final class PaperyStore {
         }
         isLoading = false
         loadedOnce = true
+        await refreshCurius()
     }
 
     // Optimistic mutations, then reconcile with the server.
@@ -224,7 +243,8 @@ struct PaperyListView: View {
                         if let url = URL(string: paper.url) { openURL(url) }
                     } label: {
                         PaperRow(paper: paper, roomyPreview: largePreviews && horizontalSizeClass == .regular,
-                                 statusChange: store.filter == .recent ? store.statusChange(for: paper) : nil)
+                                 statusChange: store.filter == .recent ? store.statusChange(for: paper) : nil,
+                                 isReposted: store.isReposted(paper))
                     }
                     .buttonStyle(.plain)
 
@@ -277,6 +297,7 @@ struct PaperyListView: View {
                             defer { curiusPosting.remove(paper.id) }
                             do {
                                 try await PaperyService.crossPostToCurius(url: paper.url, title: paper.displayTitle)
+                                store.rememberRepost(paper)
                                 curiusResult = "Posted to Curius."
                             } catch {
                                 curiusResult = "Couldn't post to Curius. \(error.localizedDescription)"
@@ -284,10 +305,11 @@ struct PaperyListView: View {
                             showsCuriusResult = true
                         }
                     } label: {
-                        Label("curius", systemImage: "arrow.2.squarepath")
+                        Label(store.isReposted(paper) ? "reposted" : "curius",
+                              systemImage: store.isReposted(paper) ? "checkmark" : "arrow.2.squarepath")
                     }
                     .tint(.gray)
-                    .disabled(curiusPosting.contains(paper.id))
+                    .disabled(curiusPosting.contains(paper.id) || store.isReposted(paper))
                 }
             }
             .onMove { source, destination in
@@ -308,6 +330,7 @@ struct PaperRow: View {
     let paper: Paper
     var roomyPreview = false
     var statusChange: PaperStatusChange? = nil
+    var isReposted = false
 
     var body: some View {
         HStack(alignment: .top, spacing: roomyPreview ? 12 : 8) {
@@ -349,6 +372,14 @@ struct PaperRow: View {
                 Image(systemName: "heart.fill")
                     .font(.caption2)
                     .foregroundStyle(Color.paperyHeart)
+            }
+
+            if isReposted {
+                Image(systemName: "arrow.2.squarepath")
+                    .font(.caption2)
+                    .foregroundStyle(Color.paperyMeta)
+                    .accessibilityLabel("Reposted to Curius")
+                    .help("Reposted to Curius")
             }
 
             PaperThumb(url: paper.url, width: roomyPreview ? 112 : 64, height: roomyPreview ? 84 : 48)
