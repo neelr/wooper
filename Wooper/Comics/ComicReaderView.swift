@@ -5,7 +5,6 @@ struct ComicReaderView: View {
     var active: Bool
     var onBack: () -> Void = {}
     @State private var library = ComicLibrary.shared
-    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -29,12 +28,6 @@ struct ComicReaderView: View {
         }
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
-        .background {
-            if #available(iOS 27.1, *) {
-                ComicOutsideBridge(active: active && scenePhase == .active)
-                    .frame(width: 0, height: 0)
-            }
-        }
         .task { if active { library.reload(); library.openRandomSpread() } }
         .onChange(of: active) { _, active in
             if active { library.reload(); library.openRandomSpread() }
@@ -184,6 +177,13 @@ struct ComicModePresenter: UIViewControllerRepresentable {
                 self.reconcile()
                 self.onBack()
             })
+            host.providesOutsideArtwork = true
+            host.onFold = { [weak self] in
+                guard let self else { return }
+                self.active = false
+                self.reconcile()
+                self.onBack()
+            }
             host.modalPresentationStyle = .fullScreen
             self.host = host
             present(host, animated: false)
@@ -193,12 +193,67 @@ struct ComicModePresenter: UIViewControllerRepresentable {
 
 @available(iOS 27.1, *)
 final class ComicPortraitController<Content: View>: UIHostingController<Content> {
+    var providesOutsideArtwork = false
+    var onFold: (() -> Void)?
+    private var outsideController: ComicOutsideController?
+    private var observers: [NSObjectProtocol] = []
+    private var exiting = false
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        registerForTraitChanges([UITraitHorizontalSizeClass.self]) { (controller: ComicPortraitController<Content>, _: UITraitCollection) in
+            controller.checkFold()
+        }
+    }
+
+    private func checkFold() {
+        guard onFold != nil, !exiting, view.window != nil,
+              traitCollection.horizontalSizeClass == .compact else { return }
+        exiting = true
+        outsideController?.setActive(false)
+        DispatchQueue.main.async { [weak self] in self?.onFold?() }
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        checkFold()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        outsideController?.setActive(false)
+        observers.forEach(NotificationCenter.default.removeObserver)
+        observers.removeAll()
+    }
+
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .portrait }
     override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation { .portrait }
     override var prefersInterfaceOrientationLocked: Bool { true }
     override var childForInterfaceOrientationLock: UIViewController? { nil }
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        checkFold()
+        guard !exiting else { return }
+        if providesOutsideArtwork {
+            if outsideController == nil {
+                let outside = ComicOutsideController()
+                outside.registrationOwner = self
+                addChild(outside)
+                outside.view.frame = .zero
+                view.addSubview(outside.view)
+                outside.didMove(toParent: self)
+                outsideController = outside
+            }
+            outsideController?.setActive(true)
+            if observers.isEmpty, let scene = view.window?.windowScene {
+                observers.append(NotificationCenter.default.addObserver(forName: UIScene.didActivateNotification, object: scene, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.outsideController?.setActive(true) }
+                })
+                observers.append(NotificationCenter.default.addObserver(forName: UIScene.willDeactivateNotification, object: scene, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.outsideController?.setActive(false) }
+                })
+            }
+        }
         setNeedsUpdateOfSupportedInterfaceOrientations()
         setNeedsUpdateOfPrefersInterfaceOrientationLocked()
         view.window?.windowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))

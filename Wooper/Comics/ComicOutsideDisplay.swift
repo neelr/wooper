@@ -13,6 +13,7 @@ struct ComicOutsideBridge: UIViewControllerRepresentable {
 /// Frames are neither recorded nor sent anywhere; only the book artwork is presented.
 @available(iOS 27.1, *)
 final class ComicOutsideController: UIViewController {
+    weak var registrationOwner: UIViewController?
     private let camera = ComicCameraSession()
     private var registration: UISceneAccessoryRegistration?
     private var requested = false
@@ -53,7 +54,7 @@ final class ComicOutsideController: UIViewController {
             let configuration = UISceneConfiguration(name: "comic artwork")
             configuration.sceneClass = UIWindowScene.self
             configuration.delegateClass = ComicArtworkSceneDelegate.self
-            self.registration = self.registerSceneAccessory(.cameraCapture(sceneConfiguration: configuration))
+            self.registration = (self.registrationOwner ?? self).registerSceneAccessory(.cameraCapture(sceneConfiguration: configuration))
             self.registration?.isEnabled = true
             ComicLibrary.shared.outsideStatus = nil
             self.camera.start { [weak self] message in
@@ -66,7 +67,7 @@ final class ComicOutsideController: UIViewController {
     }
     private func stop() {
         permissionTask?.cancel(); permissionTask = nil
-        if let registration { unregisterSceneAccessory(registration) }
+        if let registration { (registrationOwner ?? self).unregisterSceneAccessory(registration) }
         registration = nil
         camera.stop()
     }
