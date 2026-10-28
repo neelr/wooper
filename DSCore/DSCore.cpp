@@ -20,6 +20,8 @@ static retro_game_info game;
 static bool running = false, initialized = false;
 static uint32_t pixels[256 * 384] = {};
 static std::atomic<unsigned> buttons{0};
+// Preserve presses shorter than an emulated frame; sample one stable mask per frame.
+static std::atomic<unsigned> pendingPresses{0}, frameButtons{0};
 static std::atomic<int> touchX{0}, touchY{0};
 static std::atomic<bool> touching{false};
 static constexpr unsigned capacity = 32768;
@@ -74,7 +76,7 @@ static void audioSample(int16_t l,int16_t r) {int16_t p[]={l,r};audioBatch(p,1);
 static void poll() {}
 static int16_t input(unsigned port,unsigned device,unsigned index,unsigned id) {
     if(port) return 0;
-    if(device==RETRO_DEVICE_JOYPAD) return id==RETRO_DEVICE_ID_JOYPAD_MASK?(int16_t)buttons.load():(buttons.load()>>id)&1;
+    if(device==RETRO_DEVICE_JOYPAD) return id==RETRO_DEVICE_ID_JOYPAD_MASK?(int16_t)frameButtons.load():(frameButtons.load()>>id)&1;
     if(device==RETRO_DEVICE_POINTER) {
         if(id==RETRO_DEVICE_ID_POINTER_PRESSED) return touching.load();
         if(id==RETRO_DEVICE_ID_POINTER_X) return (int16_t)((2*touchX.load()+1)*65536/512-32768);
@@ -100,11 +102,17 @@ bool ds_load(const char *path,const char *sys,const char *save) {
     running=retro_load_game(&game);return running;
 }
 void ds_stop() {if(running)retro_unload_game();if(initialized)retro_deinit();running=false;initialized=false;if(romData!=MAP_FAILED){munmap(romData,romSize);romData=MAP_FAILED;romSize=0;}ds_clear_input();memset(pixels,0,sizeof pixels);}
-void ds_run() {if(running)retro_run();}
+void ds_run() {
+    if(running) {
+        unsigned held = buttons.load();
+        frameButtons = held | pendingPresses.exchange(0);
+        retro_run();
+    }
+}
 const uint32_t *ds_pixels(){return pixels;}
-void ds_button(unsigned b,bool pressed){if(b>15)return;if(pressed)buttons.fetch_or(1u<<b);else buttons.fetch_and(~(1u<<b));}
+void ds_button(unsigned b,bool pressed){if(b>15)return;if(pressed){buttons.fetch_or(1u<<b);pendingPresses.fetch_or(1u<<b);}else buttons.fetch_and(~(1u<<b));}
 void ds_touch(int x,int y,bool p){touchX=std::clamp(x,0,255);touchY=std::clamp(y,0,191);touching=p;}
-void ds_clear_input(){buttons=0;touching=false;}
+void ds_clear_input(){buttons=0;pendingPresses=0;frameButtons=0;touching=false;}
 void ds_audio(float *l,float *r,unsigned frames){unsigned pos=readPos.load(std::memory_order_relaxed),w=writePos.load(std::memory_order_acquire);for(unsigned i=0;i<frames;i++){if(pos!=w){unsigned p=(pos++%capacity)*2;l[i]=audioRing[p];r[i]=audioRing[p+1];}else{l[i]=0;r[i]=0;}}readPos.store(pos,std::memory_order_release);}
 bool ds_save_state(const char *path) {
     if(!running)return false;
