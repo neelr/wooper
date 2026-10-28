@@ -144,8 +144,7 @@ struct PaperyListView: View {
     @State private var store = PaperyStore()
     @State private var feed = CuriusFeedStore()
     @State private var curiusPosting: Set<Int> = []
-    @State private var curiusResult: String?
-    @State private var showsCuriusResult = false
+    @State private var curiusError: String?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @Environment(\.openURL) private var openURL
 
@@ -208,7 +207,25 @@ struct PaperyListView: View {
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                LensStatusBar()
+                VStack(spacing: 0) {
+                    if let curiusError {
+                        HStack {
+                            Text(curiusError)
+                                .font(.system(.caption, design: .monospaced))
+                            Spacer()
+                            Button {
+                                self.curiusError = nil
+                            } label: {
+                                Image(systemName: "xmark")
+                            }
+                            .accessibilityLabel("Dismiss error")
+                        }
+                        .foregroundStyle(Color.paperyMeta)
+                        .padding(12)
+                        .background(Color.paperyBg)
+                    }
+                    LensStatusBar()
+                }
             }
             .searchable(text: $store.query, prompt: "search")
             .onChange(of: store.filter) { _, _ in Task { await store.load() } }
@@ -222,11 +239,6 @@ struct PaperyListView: View {
         }
         .preferredColorScheme(.light)
         .tint(Color.paperyInk)
-        .alert("curius", isPresented: $showsCuriusResult) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(curiusResult ?? "")
-        }
         .task {
             if !store.loadedOnce { await store.load() }
         }
@@ -290,16 +302,15 @@ struct PaperyListView: View {
                     .tint(.paperyHeart)
                     Button {
                         guard curiusPosting.insert(paper.id).inserted else { return }
+                        curiusError = nil
                         Task { @MainActor in
                             defer { curiusPosting.remove(paper.id) }
                             do {
                                 try await PaperyService.crossPostToCurius(url: paper.url, title: paper.displayTitle)
                                 store.rememberRepost(paper)
-                                curiusResult = "Posted to Curius."
                             } catch {
-                                curiusResult = "Couldn't post to Curius. \(error.localizedDescription)"
+                                curiusError = "Couldn't post to Curius. \(error.localizedDescription)"
                             }
-                            showsCuriusResult = true
                         }
                     } label: {
                         Label(store.isReposted(paper) ? "reposted" : "curius",
