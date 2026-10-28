@@ -158,7 +158,7 @@ struct ComicModePresenter: UIViewControllerRepresentable {
     final class Presenter: UIViewController {
         var active = false
         var onBack: () -> Void = {}
-        private var host: ComicPortraitController<ComicReaderView>?
+        private var host: ComicLandscapeController<ComicReaderView>?
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
             reconcile()
@@ -172,7 +172,7 @@ struct ComicModePresenter: UIViewControllerRepresentable {
                 return
             }
             guard host == nil, view.window != nil, presentedViewController == nil else { return }
-            let host = ComicPortraitController(rootView: ComicReaderView(active: true) { [weak self] in
+            let host = ComicLandscapeController(rootView: ComicReaderView(active: true) { [weak self] in
                 guard let self else { return }
                 self.active = false
                 self.reconcile()
@@ -193,7 +193,7 @@ struct ComicModePresenter: UIViewControllerRepresentable {
 }
 
 @available(iOS 27.1, *)
-final class ComicPortraitController<Content: View>: UIHostingController<Content> {
+final class ComicLandscapeController<Content: View>: UIHostingController<Content> {
     var providesOutsideArtwork = false
     var onFold: (() -> Void)?
     private var outsideController: ComicOutsideController?
@@ -202,7 +202,7 @@ final class ComicPortraitController<Content: View>: UIHostingController<Content>
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        registerForTraitChanges([UITraitHorizontalSizeClass.self]) { (controller: ComicPortraitController<Content>, _: UITraitCollection) in
+        registerForTraitChanges([UITraitHorizontalSizeClass.self]) { (controller: ComicLandscapeController<Content>, _: UITraitCollection) in
             controller.checkFold()
         }
     }
@@ -227,8 +227,8 @@ final class ComicPortraitController<Content: View>: UIHostingController<Content>
         observers.removeAll()
     }
 
-    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .portrait }
-    override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation { .portrait }
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .landscapeRight }
+    override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation { .landscapeRight }
     override var prefersInterfaceOrientationLocked: Bool { true }
     override var childForInterfaceOrientationLock: UIViewController? { nil }
     override func viewDidAppear(_ animated: Bool) {
@@ -257,6 +257,6 @@ final class ComicPortraitController<Content: View>: UIHostingController<Content>
         }
         setNeedsUpdateOfSupportedInterfaceOrientations()
         setNeedsUpdateOfPrefersInterfaceOrientationLocked()
-        view.window?.windowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+        view.window?.windowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))
     }
 }
