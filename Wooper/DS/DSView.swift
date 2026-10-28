@@ -124,7 +124,7 @@ struct DSView: View {
                     pad("R", 11)
                 }
                 HStack(spacing: 8) {
-                    controlDiamond(top: ("↑", 4), left: ("←", 6), right: ("→", 7), bottom: ("↓", 5))
+                    DSDirectionalPad(enabled: !model.paused && !model.busy)
                     display(image: image, touch: true)
                     controlDiamond(top: ("X", 9), left: ("Y", 1), right: ("A", 8), bottom: ("B", 0))
                 }
@@ -175,9 +175,6 @@ struct DSView: View {
 
     private func controlDiamond(top: (String, UInt32), left: (String, UInt32), right: (String, UInt32), bottom: (String, UInt32)) -> some View {
         ZStack {
-            if top.0 == "↑" {
-                RoundedRectangle(cornerRadius: 3).fill(shell).frame(width: 44, height: 44)
-            }
             pad(top.0, top.1).offset(y: -44)
             pad(left.0, left.1).offset(x: -44)
             pad(right.0, right.1).offset(x: 44)
@@ -251,5 +248,97 @@ struct DSOrientationLock: UIViewRepresentable {
             target.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
             target.windowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
         }
+    }
+}
+
+
+private struct DSCross: Shape {
+    func path(in rect: CGRect) -> Path {
+        let a = rect.width / 3, b = rect.height / 3
+        var path = Path()
+        path.addLines([
+            CGPoint(x: a, y: 0), CGPoint(x: 2*a, y: 0),
+            CGPoint(x: 2*a, y: b), CGPoint(x: rect.width, y: b),
+            CGPoint(x: rect.width, y: 2*b), CGPoint(x: 2*a, y: 2*b),
+            CGPoint(x: 2*a, y: rect.height), CGPoint(x: a, y: rect.height),
+            CGPoint(x: a, y: 2*b), CGPoint(x: 0, y: 2*b),
+            CGPoint(x: 0, y: b), CGPoint(x: a, y: b)
+        ])
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// One continuous thumb surface, including diagonals and sliding between directions.
+private struct DSDirectionalPad: View {
+    let enabled: Bool
+    @State private var pressed: Set<UInt32> = []
+    private let ink = Color(red: 0.20, green: 0.39, blue: 0.46)
+
+    var body: some View {
+        ZStack {
+            DSCross()
+                .fill(ink.opacity(0.45))
+                .frame(width: 118, height: 118)
+                .offset(y: 2)
+                .blur(radius: 1)
+            DSCross()
+                .fill(LinearGradient(colors: [Color(red: 0.85, green: 0.95, blue: 0.98), Color(red: 0.58, green: 0.79, blue: 0.87)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .overlay(DSCross().stroke(ink.opacity(0.65), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round)))
+                .frame(width: 114, height: 114)
+                .offset(y: pressed.isEmpty ? 0 : 1)
+            Circle()
+                .fill(ink.opacity(0.10))
+                .overlay(Circle().stroke(ink.opacity(0.15), lineWidth: 1))
+                .frame(width: 23, height: 23)
+            ForEach(0..<4) { direction in
+                VStack(spacing: 3) {
+                    ForEach(0..<3) { _ in
+                        Capsule().fill(ink.opacity(0.45)).frame(width: 14, height: 1.5)
+                    }
+                }
+                .offset(y: -39)
+                .rotationEffect(.degrees(Double(direction) * 90))
+            }
+        }
+        .frame(width: 132, height: 132)
+        .contentShape(Rectangle())
+        .gesture(DragGesture(minimumDistance: 0)
+            .onChanged { value in update(at: value.location) }
+            .onEnded { _ in release() })
+        .onChange(of: enabled) { _, active in if !active { release() } }
+        .onDisappear { release() }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Directional pad")
+        .accessibilityAction(named: "Up") { tap(4) }
+        .accessibilityAction(named: "Down") { tap(5) }
+        .accessibilityAction(named: "Left") { tap(6) }
+        .accessibilityAction(named: "Right") { tap(7) }
+    }
+
+    private func update(at point: CGPoint) {
+        guard enabled else { release(); return }
+        let x = point.x - 66, y = point.y - 66
+        let distance = hypot(x, y)
+        var next: Set<UInt32> = []
+        if distance > 13 && distance < 90 {
+            // 45-degree diagonal sectors permit two buttons without opposite pairs.
+            if abs(x) > abs(y) * 0.4142 { next.insert(x < 0 ? 6 : 7) }
+            if abs(y) > abs(x) * 0.4142 { next.insert(y < 0 ? 4 : 5) }
+        }
+        for id in pressed.subtracting(next) { ds_button(id, false) }
+        for id in next.subtracting(pressed) { ds_button(id, true) }
+        pressed = next
+    }
+
+    private func release() {
+        for id in pressed { ds_button(id, false) }
+        pressed = []
+    }
+
+    private func tap(_ id: UInt32) {
+        guard enabled else { return }
+        ds_button(id, true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { ds_button(id, false) }
     }
 }
