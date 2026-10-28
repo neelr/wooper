@@ -39,7 +39,10 @@ struct AppShell: View {
                 .tag(Tab.record)
 
             if #available(iOS 27.1, *), supportsDS {
-                DSModePresenter(model: ds, active: selectedTab == .ds && supportsDS, exit: { selectedTab = .papery })
+                DSView(model: ds)
+                    .background {
+                        DSModePresenter(model: ds, active: selectedTab == .ds && supportsDS && ds.game != nil)
+                    }
                     .tabItem { Label("DS", systemImage: "gamecontroller.fill") }
                     .tag(Tab.ds)
             }

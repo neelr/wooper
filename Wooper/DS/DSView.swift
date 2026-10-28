@@ -5,7 +5,8 @@ import UniformTypeIdentifiers
 @available(iOS 27.1, *)
 struct DSView: View {
     @Bindable var model: DSModel
-    var exit: () -> Void = {}
+    var gameplay = false
+    private var playing: Bool { gameplay && model.game != nil }
     @Environment(\.scenePhase) private var scenePhase
     @State private var importing = false
     @State private var about = false
@@ -16,7 +17,7 @@ struct DSView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if model.game != nil {
+                if playing {
                     ArrangementView {
                         screen(image: model.top, touch: false)
                     } secondary: {
@@ -28,24 +29,23 @@ struct DSView: View {
                     library
                 }
             }
-            .background(model.game == nil ? Color.paperyBg : shell)
+            .background(!playing ? Color.paperyBg : shell)
 
-            .navigationTitle(model.game?.title ?? "DS")
+            .navigationTitle(playing ? (model.game?.title ?? "DS") : "DS")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                if model.game == nil {
+                if !playing {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button("Done", action: exit)
+                        Button { about = true } label: { Label("About DS", systemImage: "info.circle") }
                     }
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button { about = true } label: { Label("About DS", systemImage: "info.circle") }
                         Button { importing = true } label: { Label("Import ROM", systemImage: "plus") }.disabled(model.busy)
                     }
                 }
             }
-            .toolbar(model.game == nil ? .visible : .hidden, for: .navigationBar, .tabBar)
-            .statusBarHidden(model.game != nil)
-            .persistentSystemOverlays(model.game == nil ? .automatic : .hidden)
+            .toolbar(!playing ? .visible : .hidden, for: .navigationBar, .tabBar)
+            .statusBarHidden(playing)
+            .persistentSystemOverlays(!playing ? .automatic : .hidden)
             .sheet(isPresented: $about) {
                 NavigationStack {
                     ScrollView {
@@ -68,7 +68,7 @@ struct DSView: View {
                 switch result { case .success(let urls): model.importROMs(urls); case .failure(let error): model.error = error.localizedDescription }
             }
             .onAppear { model.refreshLibrary() }
-            .onDisappear { releaseButtons(); model.pause() }
+            .onDisappear { releaseButtons(); if gameplay { model.pause() } }
             .onChange(of: model.paused) { _, paused in if paused { releaseButtons() } }
             .onChange(of: model.busy) { _, busy in if busy { releaseButtons() } }
             .onChange(of: scenePhase) { _, phase in if phase != .active { model.pause() } else { model.refreshLibrary() } }
@@ -356,13 +356,11 @@ private enum DSControlHaptics {
 struct DSModePresenter: UIViewControllerRepresentable {
     let model: DSModel
     let active: Bool
-    let exit: () -> Void
 
     func makeUIViewController(context: Context) -> Presenter { Presenter() }
     func updateUIViewController(_ controller: Presenter, context: Context) {
         controller.model = model
         controller.active = active
-        controller.exit = exit
         DispatchQueue.main.async { controller.reconcile() }
     }
     static func dismantleUIViewController(_ controller: Presenter, coordinator: ()) {
@@ -373,7 +371,6 @@ struct DSModePresenter: UIViewControllerRepresentable {
     final class Presenter: UIViewController {
         var model: DSModel?
         var active = false
-        var exit: () -> Void = {}
         private var host: ConsoleController?
         override func viewDidAppear(_ animated: Bool) { super.viewDidAppear(animated); reconcile() }
         func reconcile() {
@@ -382,7 +379,7 @@ struct DSModePresenter: UIViewControllerRepresentable {
                 return
             }
             guard host == nil, view.window != nil, let model else { return }
-            let host = ConsoleController(rootView: DSView(model: model, exit: { [weak self] in self?.exit() }))
+            let host = ConsoleController(rootView: DSView(model: model, gameplay: true))
             host.modalPresentationStyle = .fullScreen
             self.host = host
             present(host, animated: false)
