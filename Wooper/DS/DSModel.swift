@@ -77,11 +77,40 @@ final class DSModel {
             for dir in [Self.roms, Self.saves, Self.system] {
                 try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             }
+            try applyLibraryEdits()
+            let titlesURL = Self.root.appending(path: "library-titles.json")
+            let titles = (try? JSONDecoder().decode([String: String].self, from: Data(contentsOf: titlesURL))) ?? [:]
             games = try FileManager.default.contentsOfDirectory(at: Self.roms, includingPropertiesForKeys: nil)
                 .filter { $0.pathExtension.lowercased() == "nds" }
-                .map { DSGame(url: $0, title: $0.deletingPathExtension().lastPathComponent) }
+                .map { DSGame(url: $0, title: titles[$0.lastPathComponent] ?? $0.deletingPathExtension().lastPathComponent) }
                 .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
         } catch { self.error = error.localizedDescription }
+    }
+
+    /// Local maintenance requests let the desktop manage the library without changing save identities.
+    private func applyLibraryEdits() throws {
+        struct Edits: Decodable {
+            let titles: [String: String]
+            let remove: [String]
+        }
+        let request = Self.root.appending(path: "library-edits.json")
+        guard FileManager.default.fileExists(atPath: request.path) else { return }
+        let edits = try JSONDecoder().decode(Edits.self, from: Data(contentsOf: request))
+        for name in Array(edits.titles.keys) + edits.remove {
+            guard !name.contains("/"), !name.contains("\\"), name.lowercased().hasSuffix(".nds") else {
+                throw DSError.message("Invalid library filename.")
+            }
+        }
+        let titlesURL = Self.root.appending(path: "library-titles.json")
+        var titles = (try? JSONDecoder().decode([String: String].self, from: Data(contentsOf: titlesURL))) ?? [:]
+        titles.merge(edits.titles) { _, new in new }
+        try JSONEncoder().encode(titles).write(to: titlesURL, options: .atomic)
+        for name in edits.remove {
+            guard game?.id != name else { throw DSError.message("Close the game before removing it.") }
+            let file = Self.roms.appending(path: name)
+            if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
+        }
+        try FileManager.default.removeItem(at: request)
     }
 
     func importROMs(_ urls: [URL]) {
