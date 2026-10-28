@@ -122,6 +122,9 @@ targets:
     sources:
       - path: RecordingActivity
       - path: Shared
+      - path: PaperyShared
+        excludes:
+          - "PaperyConfig.example.swift"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.neelr.Wooper.RecordingActivity

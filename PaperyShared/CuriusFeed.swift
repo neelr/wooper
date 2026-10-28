@@ -1,6 +1,6 @@
 import Foundation
 
-struct CuriusFeedItem: Identifiable {
+struct CuriusFeedItem: Identifiable, Codable {
     var id: String { url }
     let url: String
     var title: String

@@ -4,6 +4,7 @@ import SwiftUI
 @main
 struct RecordingActivityBundle: WidgetBundle {
     var body: some Widget {
+        CuriusFeedWidget()
         RecordingActivityLiveActivity()
     }
 }
