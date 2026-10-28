@@ -257,6 +257,7 @@ private struct DSCross: Shape {
 private struct DSDirectionalPad: View {
     let enabled: Bool
     @State private var pressed: Set<UInt32> = []
+    private let touchDiameter: CGFloat = 176
     private let ink = Color(red: 0.20, green: 0.39, blue: 0.46)
 
     var body: some View {
@@ -292,8 +293,9 @@ private struct DSDirectionalPad: View {
                 .rotationEffect(.degrees(Double(direction) * 90))
             }
         }
-        .frame(width: 132, height: 132)
-        .contentShape(Rectangle())
+        // Keep the molded cross unchanged, but reserve a larger touch target.
+        .frame(width: touchDiameter, height: touchDiameter)
+        .contentShape(Circle())
         .gesture(DragGesture(minimumDistance: 0)
             .onChanged { value in update(at: value.location) }
             .onEnded { _ in release() })
@@ -309,10 +311,11 @@ private struct DSDirectionalPad: View {
 
     private func update(at point: CGPoint) {
         guard enabled else { release(); return }
-        let x = point.x - 66, y = point.y - 66
+        let x = point.x - touchDiameter / 2, y = point.y - touchDiameter / 2
         let distance = hypot(x, y)
         var next: Set<UInt32> = []
-        if distance > 13 && distance < 90 {
+        // Allow a little thumb drift after a press, with a smaller neutral center.
+        if distance > 9 && distance <= touchDiameter / 2 + 20 {
             // 45-degree diagonal sectors permit two buttons without opposite pairs.
             if abs(x) > abs(y) * 0.4142 { next.insert(x < 0 ? 6 : 7) }
             if abs(y) > abs(x) * 0.4142 { next.insert(y < 0 ? 4 : 5) }
