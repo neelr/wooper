@@ -8,9 +8,14 @@
 #include <map>
 #include <cstdio>
 #include <algorithm>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 static std::string systemDir, saveDir, romPath;
-static std::vector<char> romData;
+static void *romData = MAP_FAILED;
+static size_t romSize = 0;
 static retro_game_info game;
 static bool running = false, initialized = false;
 static uint32_t pixels[256 * 384] = {};
@@ -79,18 +84,22 @@ static int16_t input(unsigned port,unsigned device,unsigned index,unsigned id) {
 }
 bool ds_load(const char *path,const char *sys,const char *save) {
     ds_stop(); systemDir=sys;saveDir=save;romPath=path;
-    std::ifstream f(path,std::ios::binary);if(!f)return false;
-    f.seekg(0,std::ios::end); auto length=f.tellg();
-    if(length<512 || length>512*1024*1024)return false;
-    f.seekg(0);romData.assign(std::istreambuf_iterator<char>(f),{});
-    auto word=[](size_t p)->uint64_t {auto d=(const uint8_t*)romData.data();return uint64_t(d[p])|(uint64_t(d[p+1])<<8)|(uint64_t(d[p+2])<<16)|(uint64_t(d[p+3])<<24);};
-    for(size_t p:{0x20,0x30})if(word(p)<512||word(p+12)==0||word(p)+word(p+12)>romData.size())return false;
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) return false;
+    struct stat info{};
+    if (fstat(fd, &info) != 0 || info.st_size < 512 || info.st_size > 512LL*1024*1024) { close(fd); return false; }
+    romSize = (size_t)info.st_size;
+    romData = mmap(nullptr, romSize, PROT_READ, MAP_PRIVATE, fd, 0);
+    close(fd);
+    if (romData == MAP_FAILED) { romSize = 0; return false; }
+    auto word=[](size_t p)->uint64_t {auto d=(const uint8_t*)romData;return uint64_t(d[p])|(uint64_t(d[p+1])<<8)|(uint64_t(d[p+2])<<16)|(uint64_t(d[p+3])<<24);};
+    for(size_t p:{0x20,0x30})if(word(p)<512||word(p+12)==0||word(p)+word(p+12)>romSize){ds_stop();return false;}
     retro_set_environment(environment);retro_set_video_refresh(video);retro_set_audio_sample(audioSample);
     retro_set_audio_sample_batch(audioBatch);retro_set_input_poll(poll);retro_set_input_state(input);
-    retro_init();initialized=true;game={romPath.c_str(),romData.data(),romData.size(),nullptr};
+    retro_init();initialized=true;game={romPath.c_str(),romData,romSize,nullptr};
     running=retro_load_game(&game);return running;
 }
-void ds_stop() {if(running)retro_unload_game();if(initialized)retro_deinit();running=false;initialized=false;ds_clear_input();memset(pixels,0,sizeof pixels);}
+void ds_stop() {if(running)retro_unload_game();if(initialized)retro_deinit();running=false;initialized=false;if(romData!=MAP_FAILED){munmap(romData,romSize);romData=MAP_FAILED;romSize=0;}ds_clear_input();memset(pixels,0,sizeof pixels);}
 void ds_run() {if(running)retro_run();}
 const uint32_t *ds_pixels(){return pixels;}
 void ds_button(unsigned b,bool pressed){if(b>15)return;if(pressed)buttons.fetch_or(1u<<b);else buttons.fetch_and(~(1u<<b));}

@@ -23,7 +23,12 @@ The current build script targets devices, not the Simulator.
 
 The DS tab appears only on Duo in regular-width layouts. It pauses when hidden,
 when the phone folds to compact width, when backgrounded, or on audio interruption.
-It uses iOS 27.1 ArrangementView to arrange its screens around reserved fold regions.
+DS is presented by a full-screen UIKit hosting controller that requests portrait
+and the iOS interface-orientation lock from the library onward. It uses iOS 27.1
+ArrangementView to arrange its screens around reserved fold regions.
+
+The bridge memory-maps the ROM read-only for the lifetime of the core session,
+keeping the libretro reset pointer valid without a byte-by-byte copy of large ROMs.
 
 Import raw `.nds` files through the DS library's + button. ZIP archives are not
 supported. The ROM header and size are validated before loading. Duplicate imported

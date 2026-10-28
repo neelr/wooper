@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 @available(iOS 27.1, *)
 struct DSView: View {
     @Bindable var model: DSModel
+    var exit: () -> Void = {}
     @Environment(\.scenePhase) private var scenePhase
     @State private var importing = false
     @State private var about = false
@@ -28,15 +29,16 @@ struct DSView: View {
                 }
             }
             .background(model.game == nil ? Color.paperyBg : shell)
-            .background(DSOrientationLock(locked: model.game != nil))
+
             .navigationTitle(model.game?.title ?? "DS")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if model.game == nil {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button { about = true } label: { Label("About DS", systemImage: "info.circle") }
+                        Button("Done", action: exit)
                     }
                     ToolbarItem(placement: .topBarTrailing) {
+                        Button { about = true } label: { Label("About DS", systemImage: "info.circle") }
                         Button { importing = true } label: { Label("Import ROM", systemImage: "plus") }.disabled(model.busy)
                     }
                 }
@@ -58,7 +60,7 @@ struct DSView: View {
                     .toolbar { Button("Done") { about = false } }
                 }
             }
-            .overlay { if model.busy { ProgressView().padding(18).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) } }
+            .overlay { if model.busy { VStack(spacing: 10) { ProgressView(); Text("Loading…").font(.caption.monospaced()) }.padding(18).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) } }
             .alert("DS", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
                 Button("OK") { model.error = nil }
             } message: { Text(model.error ?? "") }
@@ -167,7 +169,7 @@ struct DSView: View {
             ZStack {
                 Color.black
                 if let image { Image(decorative: image, scale: 1).resizable().interpolation(.none) }
-                if model.paused { Text("Paused").foregroundStyle(.white).padding(8).background(.black.opacity(0.65), in: Capsule()) }
+                if model.paused && !model.busy { Text("Paused").foregroundStyle(.white).padding(8).background(.black.opacity(0.65), in: Capsule()) }
             }
             .frame(width: width, height: height)
             .clipShape(RoundedRectangle(cornerRadius: 3))
@@ -230,53 +232,6 @@ struct DSView: View {
                 pressButton(id)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { heldButtons.remove(id); ds_button(id, false) }
             }
-    }
-}
-
-
-/// Fix gameplay to portrait: charging port down, upper DS display above controls.
-/// Scope the restriction to this window and release it when gameplay disappears.
-@MainActor
-struct DSOrientationLock: UIViewRepresentable {
-    let locked: Bool
-    private static var lockedWindows: Set<ObjectIdentifier> = []
-
-    static func orientations(for window: UIWindow?) -> UIInterfaceOrientationMask {
-        guard let window, lockedWindows.contains(ObjectIdentifier(window)) else { return .all }
-        return .portrait
-    }
-
-    func makeUIView(context: Context) -> LockView { LockView() }
-    func updateUIView(_ view: LockView, context: Context) { view.setLocked(locked) }
-    static func dismantleUIView(_ view: LockView, coordinator: ()) { view.setLocked(false) }
-
-    final class LockView: UIView {
-        private var wantsLock = false
-        private weak var appliedWindow: UIWindow?
-
-        override func didMoveToWindow() {
-            super.didMoveToWindow()
-            apply()
-        }
-
-        func setLocked(_ locked: Bool) {
-            wantsLock = locked
-            apply()
-        }
-
-        private func apply() {
-            let target = wantsLock ? window : nil
-            guard target !== appliedWindow else { return }
-            if let previous = appliedWindow {
-                DSOrientationLock.lockedWindows.remove(ObjectIdentifier(previous))
-                previous.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-            }
-            appliedWindow = target
-            guard let target else { return }
-            DSOrientationLock.lockedWindows.insert(ObjectIdentifier(target))
-            target.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-            target.windowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
-        }
     }
 }
 
@@ -389,5 +344,58 @@ private enum DSControlHaptics {
     static func click() {
         impact.impactOccurred(intensity: 0.65)
         impact.prepare()
+    }
+}
+
+
+/// A presented controller owns the lock; an embedded SwiftUI background cannot.
+@available(iOS 27.1, *)
+struct DSModePresenter: UIViewControllerRepresentable {
+    let model: DSModel
+    let active: Bool
+    let exit: () -> Void
+
+    func makeUIViewController(context: Context) -> Presenter { Presenter() }
+    func updateUIViewController(_ controller: Presenter, context: Context) {
+        controller.model = model
+        controller.active = active
+        controller.exit = exit
+        DispatchQueue.main.async { controller.reconcile() }
+    }
+    static func dismantleUIViewController(_ controller: Presenter, coordinator: ()) {
+        controller.active = false
+        controller.reconcile()
+    }
+
+    final class Presenter: UIViewController {
+        var model: DSModel?
+        var active = false
+        var exit: () -> Void = {}
+        private var host: ConsoleController?
+        override func viewDidAppear(_ animated: Bool) { super.viewDidAppear(animated); reconcile() }
+        func reconcile() {
+            if !active {
+                if let host { model?.pause(); host.dismiss(animated: false); self.host = nil }
+                return
+            }
+            guard host == nil, view.window != nil, let model else { return }
+            let host = ConsoleController(rootView: DSView(model: model, exit: { [weak self] in self?.exit() }))
+            host.modalPresentationStyle = .fullScreen
+            self.host = host
+            present(host, animated: false)
+        }
+    }
+
+    final class ConsoleController: UIHostingController<DSView> {
+        override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .portrait }
+        override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation { .portrait }
+        override var prefersInterfaceOrientationLocked: Bool { true }
+        override var childForInterfaceOrientationLock: UIViewController? { nil }
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            setNeedsUpdateOfSupportedInterfaceOrientations()
+            setNeedsUpdateOfPrefersInterfaceOrientationLocked()
+            view.window?.windowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+        }
     }
 }
