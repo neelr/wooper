@@ -199,6 +199,7 @@ final class ComicLandscapeController<Content: View>: UIHostingController<Content
     private var outsideController: ComicOutsideController?
     private var observers: [NSObjectProtocol] = []
     private var exiting = false
+    private var orientationLocked = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -218,6 +219,22 @@ final class ComicLandscapeController<Content: View>: UIHostingController<Content
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         checkFold()
+        updateOrientationLock()
+    }
+
+    private func updateOrientationLock() {
+        guard let scene = view.window?.windowScene else { return }
+        let ready = scene.effectiveGeometry.interfaceOrientation == .landscapeRight
+        guard orientationLocked != ready else { return }
+        orientationLocked = ready
+        setNeedsUpdateOfPrefersInterfaceOrientationLocked()
+    }
+
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        coordinator.animate(alongsideTransition: nil) { [weak self] _ in
+            self?.updateOrientationLock()
+        }
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -229,7 +246,7 @@ final class ComicLandscapeController<Content: View>: UIHostingController<Content
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .landscapeRight }
     override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation { .landscapeRight }
-    override var prefersInterfaceOrientationLocked: Bool { true }
+    override var prefersInterfaceOrientationLocked: Bool { orientationLocked }
     override var childForInterfaceOrientationLock: UIViewController? { nil }
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
@@ -255,8 +272,15 @@ final class ComicLandscapeController<Content: View>: UIHostingController<Content
                 })
             }
         }
+        // Locking before requesting geometry pins the orientation we entered in.
+        // Let UIKit rotate first, then lock only the confirmed landscape geometry.
+        updateOrientationLock()
         setNeedsUpdateOfSupportedInterfaceOrientations()
         setNeedsUpdateOfPrefersInterfaceOrientationLocked()
-        view.window?.windowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.exiting, let scene = self.view.window?.windowScene else { return }
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))
+            self.updateOrientationLock()
+        }
     }
 }
