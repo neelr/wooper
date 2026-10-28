@@ -146,6 +146,12 @@ struct DSView: View {
         .padding(.vertical, touch ? 4 : 10)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(LinearGradient(colors: [Color(red: 0.77, green: 0.91, blue: 0.95), shell, Color(red: 0.52, green: 0.75, blue: 0.84)], startPoint: .topLeading, endPoint: .bottomTrailing))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18)
+                .strokeBorder(.white.opacity(0.38), lineWidth: 1)
+                .padding(3)
+                .allowsHitTesting(false)
+        }
         .overlay(alignment: touch ? .top : .bottom) {
             Rectangle().fill(controlInk.opacity(0.35)).frame(height: 3).accessibilityHidden(true)
         }
@@ -162,8 +168,10 @@ struct DSView: View {
             }
             .frame(width: width, height: height)
             .clipShape(RoundedRectangle(cornerRadius: 3))
-            .overlay(RoundedRectangle(cornerRadius: 3).stroke(Color.black, lineWidth: 5))
-            .shadow(color: .black.opacity(0.6), radius: 2, y: 2)
+            .overlay(RoundedRectangle(cornerRadius: 3).stroke(Color(white: 0.12), lineWidth: 5))
+            .overlay(RoundedRectangle(cornerRadius: 5).stroke(.white.opacity(0.35), lineWidth: 1).padding(-4))
+            .shadow(color: controlInk.opacity(0.55), radius: 2, y: -1)
+            .shadow(color: .white.opacity(0.5), radius: 1, y: 2)
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0).onChanged { value in
                 guard touch, !model.paused else { return }
@@ -192,7 +200,10 @@ struct DSView: View {
                 RoundedRectangle(cornerRadius: title.count == 1 && "ABXY".contains(title) ? 22 : 6)
                     .fill(LinearGradient(colors: [Color(red: 0.85, green: 0.95, blue: 0.98), Color(red: 0.62, green: 0.82, blue: 0.89)], startPoint: .top, endPoint: .bottom))
                     .overlay(RoundedRectangle(cornerRadius: title.count == 1 && "ABXY".contains(title) ? 22 : 6).stroke(controlInk.opacity(0.35), lineWidth: 1))
-                    .shadow(color: controlInk.opacity(0.4), radius: 1, y: 2)
+                    .overlay(RoundedRectangle(cornerRadius: title.count == 1 && "ABXY".contains(title) ? 22 : 6)
+                        .strokeBorder(.white.opacity(0.6), lineWidth: 1).padding(1))
+                    .shadow(color: controlInk.opacity(0.55), radius: 1, y: 3)
+                    .shadow(color: .white.opacity(0.65), radius: 1, y: -1)
                     .padding(3)
             }
             .contentShape(Rectangle())
@@ -278,6 +289,10 @@ private struct DSDirectionalPad: View {
     var body: some View {
         ZStack {
             DSCross()
+                .fill(ink.opacity(0.28))
+                .overlay(DSCross().stroke(.white.opacity(0.6), lineWidth: 1).offset(y: 1))
+                .frame(width: 124, height: 124)
+            DSCross()
                 .fill(ink.opacity(0.45))
                 .frame(width: 118, height: 118)
                 .offset(y: 2)
@@ -285,7 +300,9 @@ private struct DSDirectionalPad: View {
             DSCross()
                 .fill(LinearGradient(colors: [Color(red: 0.85, green: 0.95, blue: 0.98), Color(red: 0.58, green: 0.79, blue: 0.87)], startPoint: .topLeading, endPoint: .bottomTrailing))
                 .overlay(DSCross().stroke(ink.opacity(0.65), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round)))
+                .overlay(DSCross().stroke(.white.opacity(0.65), style: StrokeStyle(lineWidth: 1, lineJoin: .round)).padding(2))
                 .frame(width: 114, height: 114)
+                .shadow(color: ink.opacity(0.5), radius: pressed.isEmpty ? 2 : 0.5, y: pressed.isEmpty ? 3 : 1)
                 .offset(y: pressed.isEmpty ? 0 : 1)
             Circle()
                 .fill(ink.opacity(0.10))
@@ -295,6 +312,7 @@ private struct DSDirectionalPad: View {
                 VStack(spacing: 3) {
                     ForEach(0..<3) { _ in
                         Capsule().fill(ink.opacity(0.45)).frame(width: 14, height: 1.5)
+                            .shadow(color: .white.opacity(0.85), radius: 0, y: 1)
                     }
                 }
                 .offset(y: -39)
