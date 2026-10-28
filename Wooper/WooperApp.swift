@@ -8,12 +8,9 @@ extension Notification.Name {
     static let paperyServerChanged = Notification.Name("paperyServerChanged")
 }
 
-/// Minimal delegate whose only job is instantiating the BLE central before
-/// application(_:didFinishLaunching...) returns — CoreBluetooth state
-/// restoration requires the restored central to exist by then — and
-/// registering the lens cache refresh background task.
+/// Maintains Papery push notifications and offline cache refresh.
 final class WooperAppDelegate: NSObject, UIApplicationDelegate {
-    static let lensRefreshTaskID = "com.neelr.Wooper.lensrefresh"
+    static let paperyRefreshTaskID = "com.neelr.Wooper.paperyrefresh"
 
 
 
@@ -21,14 +18,13 @@ final class WooperAppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         willFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
-        _ = LensSyncService.shared
 
         // Periodic background refresh: while the phone has internet, keep the
         // offline cache (index + article texts) current, so a later reader
         // sync works with no connectivity at all. iOS decides the actual
         // cadence; typically a handful of runs per day.
-        BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.lensRefreshTaskID, using: nil) { task in
-            Self.scheduleLensRefresh()
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.paperyRefreshTaskID, using: nil) { task in
+            Self.schedulePaperyRefresh()
             let work = Task {
                 await PaperyCache.refresh()
                 task.setTaskCompleted(success: true)
@@ -51,12 +47,12 @@ final class WooperAppDelegate: NSObject, UIApplicationDelegate {
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
-        lensLog("[lens] apns token registered")
+        paperyLog("[papery] apns token registered")
         Task { try? await PaperyService.registerPushToken(token) }
     }
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        lensLog("[lens] apns registration failed: \(error.localizedDescription)")
+        paperyLog("[papery] apns registration failed: \(error.localizedDescription)")
     }
 
     func application(
@@ -64,19 +60,17 @@ final class WooperAppDelegate: NSObject, UIApplicationDelegate {
         didReceiveRemoteNotification userInfo: [AnyHashable: Any],
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
-        lensLog("[lens] apns push received")
-        LensSyncService.shared.markServerDirty()
+        paperyLog("[papery] apns push received")
         NotificationCenter.default.post(name: .paperyServerChanged, object: nil)
         Task {
-            // Refresh the phone-side cache, then nudge the reader if in range.
+            // Refresh the phone-side offline cache.
             await PaperyCache.refresh()
-            LensSyncService.shared.syncNow()
             completionHandler(.newData)
         }
     }
 
-    static func scheduleLensRefresh() {
-        let request = BGAppRefreshTaskRequest(identifier: lensRefreshTaskID)
+    static func schedulePaperyRefresh() {
+        let request = BGAppRefreshTaskRequest(identifier: paperyRefreshTaskID)
         request.earliestBeginDate = Date(timeIntervalSinceNow: 30 * 60)
         try? BGTaskScheduler.shared.submit(request)
     }
@@ -107,7 +101,7 @@ struct WooperApp: App {
                 // read states collected from the reader while offline.
                 Task.detached { await PaperyCache.refresh() }
             case .background:
-                WooperAppDelegate.scheduleLensRefresh()
+                WooperAppDelegate.schedulePaperyRefresh()
             default:
                 break
             }

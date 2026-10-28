@@ -52,7 +52,6 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "Wooper needs microphone access to record voice memos."
         INFOPLIST_KEY_NSCameraUsageDescription: "An active camera session lets wooper show book artwork on the Duo's outside screen. No photos or videos are recorded."
-        INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: "Wooper syncs your papery reading list to your e-reader over Bluetooth."
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Wooper transcribes your voice memos to save to Notion."
         INFOPLIST_KEY_NSSupportsLiveActivities: YES
         INFOPLIST_KEY_CFBundleDisplayName: "wooper"
@@ -73,11 +72,10 @@ targets:
         LSSupportsOpeningDocumentsInPlace: true
         UIBackgroundModes:
           - audio
-          - bluetooth-central
           - remote-notification
           - fetch
         BGTaskSchedulerPermittedIdentifiers:
-          - com.neelr.Wooper.lensrefresh
+          - com.neelr.Wooper.paperyrefresh
         NSAppTransportSecurity:
           NSExceptionDomains:
             tail90f369.ts.net:

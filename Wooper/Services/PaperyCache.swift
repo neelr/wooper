@@ -1,5 +1,11 @@
 import Foundation
 
+@inline(__always) func paperyLog(_ message: String) {
+    fputs(message + "\n", stdout)
+    fflush(stdout)
+}
+
+
 /// Offline store for the lens sync: the latest device index plus every
 /// article's text, refreshed while the phone has internet, so the reader can
 /// be fully synced later with no connectivity at all (airplane, subway, tent).
@@ -111,7 +117,7 @@ enum PaperyCache {
         queue.removeAll { ($0["id"] as? Int) == id }
         queue.append(["id": id, "read": read])
         UserDefaults.standard.set(queue, forKey: pendingKey)
-        lensLog("[lens] queued offline read state id=\(id) read=\(read)")
+        paperyLog("[papery] queued offline read state id=\(id) read=\(read)")
     }
 
     /// Push queued read states to papery; failures stay queued for next time.
@@ -123,7 +129,7 @@ enum PaperyCache {
             guard let id = item["id"] as? Int, let read = item["read"] as? Bool else { continue }
             do {
                 try await PaperyService.setRead(id: id, read: read)
-                lensLog("[lens] flushed queued read id=\(id)")
+                paperyLog("[papery] flushed queued read id=\(id)")
             } catch {
                 remaining.append(item)
             }
@@ -173,7 +179,6 @@ enum PaperyCache {
     private static func performRefresh() async {
         do {
             let index = try await PaperyService.deviceIndexNDJSON()
-            let changed = indexBody(index) != indexBody(loadIndex())
             saveIndex(index)
 
             var wanted: [(id: Int, textAt: UInt32)] = []
@@ -199,20 +204,11 @@ enum PaperyCache {
                 ingestBundle(data, versions: Dictionary(uniqueKeysWithValues: slice.map { ($0.id, $0.textAt) }))
                 fetched += slice.count
             }
-            if fetched > 0 { lensLog("[lens] cache refreshed: \(fetched) new articles") }
+            if fetched > 0 { paperyLog("[papery] cache refreshed: \(fetched) new articles") }
             await flushPendingReads()
-            if changed {
-                // Server state moved since the cache last saw it — the reader
-                // is stale no matter how we found out (push, pull-to-refresh,
-                // in-app toggle). Don't rely on the push echo; nudge directly.
-                lensLog("[lens] index changed; nudging reader")
-                await MainActor.run {
-                    LensSyncService.shared.markServerDirty()
-                    LensSyncService.shared.syncNow()
-                }
-            }
+
         } catch {
-            lensLog("[lens] cache refresh failed: \(error.localizedDescription)")
+            paperyLog("[papery] cache refresh failed: \(error.localizedDescription)")
         }
     }
 }

@@ -90,9 +90,7 @@ final class PaperyStore {
 
     // Optimistic mutations, then reconcile with the server.
 
-    /// Every mutation changes server state the reader cares about; refreshing
-    /// the lens cache detects that and nudges a BLE sync, without waiting for
-    /// the (throttle-prone) push echo back to this same phone.
+    /// Refresh the offline cache after a server mutation.
     private func nudgeReader() {
         Task.detached { await PaperyCache.refresh() }
     }
@@ -224,7 +222,6 @@ struct PaperyListView: View {
                         .padding(12)
                         .background(Color.paperyBg)
                     }
-                    LensStatusBar()
                 }
             }
             .searchable(text: $store.query, prompt: "search")
@@ -394,34 +391,6 @@ struct PaperRow: View {
         }
         .padding(.vertical, roomyPreview ? 8 : 4)
         .contentShape(Rectangle())
-    }
-}
-
-
-/// One-line status strip for the e-reader sync: what the BLE central is doing
-/// and a manual kick. Lives at the bottom of the papery tab so it's visible
-/// exactly where the content it syncs lives.
-private struct LensStatusBar: View {
-    @State private var lens = LensSyncService.shared
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "book.and.wrench")
-                .font(.caption)
-                .foregroundStyle(Color.paperyMeta)
-            Text("lens: \(lens.statusText)")
-                .font(.caption)
-                .foregroundStyle(Color.paperyMeta)
-                .lineLimit(1)
-            Spacer()
-            Button("sync") { lens.syncNow() }
-                .font(.caption.weight(.medium))
-                .buttonStyle(.bordered)
-                .controlSize(.mini)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 6)
-        .background(Color.paperyBg)
     }
 }
 

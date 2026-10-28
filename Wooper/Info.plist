@@ -4,7 +4,7 @@
 <dict>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
-		<string>com.neelr.Wooper.lensrefresh</string>
+		<string>com.neelr.Wooper.paperyrefresh</string>
 	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
@@ -40,7 +40,6 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
-		<string>bluetooth-central</string>
 		<string>remote-notification</string>
 		<string>fetch</string>
 	</array>
