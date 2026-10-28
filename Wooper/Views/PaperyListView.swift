@@ -124,6 +124,9 @@ struct PaperyListView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var store = PaperyStore()
     @State private var feed = CuriusFeedStore()
+    @State private var curiusPosting: Set<Int> = []
+    @State private var curiusResult: String?
+    @State private var showsCuriusResult = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @Environment(\.openURL) private var openURL
 
@@ -203,6 +206,11 @@ struct PaperyListView: View {
         }
         .preferredColorScheme(.light)
         .tint(Color.paperyInk)
+        .alert("curius", isPresented: $showsCuriusResult) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(curiusResult ?? "")
+        }
         .task {
             if !store.loadedOnce { await store.load() }
         }
@@ -263,6 +271,23 @@ struct PaperyListView: View {
                         Label("Like", systemImage: paper.isLiked ? "heart.slash" : "heart")
                     }
                     .tint(.paperyHeart)
+                    Button {
+                        guard curiusPosting.insert(paper.id).inserted else { return }
+                        Task { @MainActor in
+                            defer { curiusPosting.remove(paper.id) }
+                            do {
+                                try await PaperyService.crossPostToCurius(url: paper.url, title: paper.displayTitle)
+                                curiusResult = "Posted to Curius."
+                            } catch {
+                                curiusResult = "Couldn't post to Curius. \(error.localizedDescription)"
+                            }
+                            showsCuriusResult = true
+                        }
+                    } label: {
+                        Label("curius", systemImage: "arrow.2.squarepath")
+                    }
+                    .tint(.gray)
+                    .disabled(curiusPosting.contains(paper.id))
                 }
             }
             .onMove { source, destination in

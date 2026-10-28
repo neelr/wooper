@@ -98,6 +98,15 @@ enum PaperyService {
         try await send(try makeRequest("/api/toggle-like/\(id)", method: "POST"))
     }
 
+    static func crossPostToCurius(url: String, title: String) async throws {
+        let data = try await send(try makeRequest("/api/curius/save", method: "POST",
+                                                  body: ["url": url, "title": title]))
+        struct Response: Decodable { let ok: Bool }
+        guard try JSONDecoder().decode(Response.self, from: data).ok else {
+            throw PaperyError.badResponse(502)
+        }
+    }
+
     static func delete(id: Int) async throws {
         try await send(try makeRequest("/api/paper/\(id)", method: "DELETE"))
     }
