@@ -40,6 +40,7 @@ struct AppShell: View {
 
             if #available(iOS 27.1, *), supportsDS {
                 DSView(model: ds)
+                    .toolbar(.visible, for: .tabBar)
                     .background {
                         DSModePresenter(model: ds, active: selectedTab == .ds && supportsDS && ds.game != nil)
                     }

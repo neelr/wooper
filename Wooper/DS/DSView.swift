@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 struct DSView: View {
     @Bindable var model: DSModel
     var gameplay = false
+    var closeGameplay: () -> Void = {}
     private var playing: Bool { gameplay && model.game != nil }
     @Environment(\.scenePhase) private var scenePhase
     @State private var importing = false
@@ -43,7 +44,7 @@ struct DSView: View {
                     }
                 }
             }
-            .toolbar(!playing ? .visible : .hidden, for: .navigationBar, .tabBar)
+            .toolbar(!playing ? .visible : .hidden, for: .navigationBar)
             .statusBarHidden(playing)
             .persistentSystemOverlays(!playing ? .automatic : .hidden)
             .sheet(isPresented: $about) {
@@ -68,6 +69,9 @@ struct DSView: View {
                 switch result { case .success(let urls): model.importROMs(urls); case .failure(let error): model.error = error.localizedDescription }
             }
             .onAppear { model.refreshLibrary() }
+            .onChange(of: model.game?.id) { _, gameID in
+                if gameplay && gameID == nil { closeGameplay() }
+            }
             .onDisappear { releaseButtons(); if gameplay { model.pause() } }
             .onChange(of: model.paused) { _, paused in if paused { releaseButtons() } }
             .onChange(of: model.busy) { _, busy in if busy { releaseButtons() } }
@@ -373,13 +377,20 @@ struct DSModePresenter: UIViewControllerRepresentable {
         var active = false
         private var host: ConsoleController?
         override func viewDidAppear(_ animated: Bool) { super.viewDidAppear(animated); reconcile() }
+        func returnToLibrary() {
+            active = false
+            let previous = host
+            host = nil
+            previous?.dismiss(animated: false)
+        }
+
         func reconcile() {
             if !active {
                 if let host { model?.pause(); host.dismiss(animated: false); self.host = nil }
                 return
             }
             guard host == nil, view.window != nil, let model else { return }
-            let host = ConsoleController(rootView: DSView(model: model, gameplay: true))
+            let host = ConsoleController(rootView: DSView(model: model, gameplay: true, closeGameplay: { [weak self] in self?.returnToLibrary() }))
             host.modalPresentationStyle = .fullScreen
             self.host = host
             present(host, animated: false)
