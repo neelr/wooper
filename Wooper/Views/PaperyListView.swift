@@ -1,13 +1,14 @@
 import SwiftUI
 
 enum PaperyFilter: String, CaseIterable, Identifiable {
-    case unread, all, liked
+    case unread, all, liked, recent
     var id: String { rawValue }
     var label: String {
         switch self {
         case .unread: return "Unread"
         case .all: return "All"
         case .liked: return "Liked"
+        case .recent: return "Recent"
         }
     }
     /// The `read` query value this filter maps to.
@@ -23,18 +24,45 @@ final class PaperyStore {
     var isLoading = false
     var errorMessage: String?
     var loadedOnce = false
+    private var loadGeneration = 0
+    private var statusChanges: [String: PaperStatusChange] = {
+        guard let data = UserDefaults.standard.data(forKey: "papery.statusChanges") else { return [:] }
+        return (try? JSONDecoder().decode([String: PaperStatusChange].self, from: data)) ?? [:]
+    }()
+
+    func statusChange(for paper: Paper) -> PaperStatusChange? {
+        paper.latestStatusChange(local: statusChanges[String(paper.id)])
+    }
+
+    private func remember(_ paper: Paper, kind: PaperStatusChange.Kind) {
+        statusChanges[String(paper.id)] = .init(kind: kind, timestamp: Date().timeIntervalSince1970 * 1000)
+        if let data = try? JSONEncoder().encode(statusChanges) {
+            UserDefaults.standard.set(data, forKey: "papery.statusChanges")
+        }
+    }
 
     @MainActor
     func load() async {
+        loadGeneration += 1
+        let generation = loadGeneration
+        let requestedFilter = filter
         isLoading = true
         errorMessage = nil
         do {
-            papers = try await PaperyService.list(
+            let fetched = try await PaperyService.list(
                 read: filter.readParam,
                 liked: filter.likedOnly,
                 query: query
             )
+            guard generation == loadGeneration else { return }
+            if requestedFilter == .recent {
+                papers = fetched.filter { statusChange(for: $0) != nil }.sorted {
+                    let a = statusChange(for: $0)!.timestamp, b = statusChange(for: $1)!.timestamp
+                    return a == b ? $0.id > $1.id : a > b
+                }
+            } else { papers = fetched }
         } catch {
+            guard generation == loadGeneration else { return }
             errorMessage = error.localizedDescription
         }
         isLoading = false
@@ -52,16 +80,22 @@ final class PaperyStore {
 
     @MainActor
     func toggleRead(_ paper: Paper) async {
-        try? await PaperyService.toggleRead(id: paper.id)
-        await load()
-        nudgeReader()
+        do {
+            try await PaperyService.toggleRead(id: paper.id)
+            remember(paper, kind: paper.isRead ? .unread : .read)
+            await load()
+            nudgeReader()
+        } catch { errorMessage = error.localizedDescription }
     }
 
     @MainActor
     func toggleLike(_ paper: Paper) async {
-        try? await PaperyService.toggleLike(id: paper.id)
-        await load()
-        nudgeReader()
+        do {
+            try await PaperyService.toggleLike(id: paper.id)
+            remember(paper, kind: paper.isLiked ? .unliked : .liked)
+            await load()
+            nudgeReader()
+        } catch { errorMessage = error.localizedDescription }
     }
 
     @MainActor
@@ -74,6 +108,7 @@ final class PaperyStore {
     /// Reorder locally, then persist the moved paper's new neighbours.
     @MainActor
     func move(from source: IndexSet, to destination: Int) {
+        guard filter != .recent else { return }
         guard let first = source.first, papers.indices.contains(first) else { return }
         let movingId = papers[first].id
         papers.move(fromOffsets: source, toOffset: destination)
@@ -122,7 +157,7 @@ struct PaperyListView: View {
                     }
                 } else if store.papers.isEmpty && store.loadedOnce {
                     ContentUnavailableView(
-                        store.filter == .liked ? "No liked papers" : "Nothing here",
+                        store.filter == .recent ? "No recent status changes" : (store.filter == .liked ? "No liked papers" : "Nothing here"),
                         systemImage: store.filter == .liked ? "heart" : "books.vertical"
                     )
                 } else {
@@ -135,7 +170,7 @@ struct PaperyListView: View {
             .toolbarBackground(Color.paperyBg, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    EditButton()
+                    if store.filter != .recent { EditButton() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     // Compact, standard filter affordance: an icon menu that
@@ -180,7 +215,8 @@ struct PaperyListView: View {
                     Button {
                         if let url = URL(string: paper.url) { openURL(url) }
                     } label: {
-                        PaperRow(paper: paper, roomyPreview: largePreviews && horizontalSizeClass == .regular)
+                        PaperRow(paper: paper, roomyPreview: largePreviews && horizontalSizeClass == .regular,
+                                 statusChange: store.filter == .recent ? store.statusChange(for: paper) : nil)
                     }
                     .buttonStyle(.plain)
 
@@ -201,6 +237,7 @@ struct PaperyListView: View {
                 .modifier(ShortReadSwipe(enabled: largePreviews && horizontalSizeClass == .regular, isRead: paper.isRead) {
                     Task { await store.toggleRead(paper) }
                 })
+                .moveDisabled(store.filter == .recent)
                 .listRowBackground(Color.paperyBg)
                 .listRowSeparatorTint(Color.paperyMeta.opacity(0.3))
                 .swipeActions(edge: .leading, allowsFullSwipe: true) {
@@ -245,6 +282,7 @@ struct PaperyListView: View {
 struct PaperRow: View {
     let paper: Paper
     var roomyPreview = false
+    var statusChange: PaperStatusChange? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: roomyPreview ? 12 : 8) {
@@ -260,7 +298,13 @@ struct PaperRow: View {
                         Text(site)
                     }
                     Text("·")
-                    Text(paper.addedDate, format: .relative(presentation: .named))
+                    if let statusChange {
+                        Text(statusChange.kind.label)
+                        Text("·")
+                        Text(statusChange.date, format: .relative(presentation: .named))
+                    } else {
+                        Text(paper.addedDate, format: .relative(presentation: .named))
+                    }
                     if paper.highlightCount > 0 {
                         Text("\(paper.highlightCount) hl")
                             .padding(.horizontal, 5)
