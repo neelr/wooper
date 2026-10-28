@@ -191,9 +191,6 @@ struct PaperyListView: View {
             .toolbarTitleDisplayMode(.inlineLarge)
             .toolbarBackground(Color.paperyBg, for: .navigationBar)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    if store.filter != .recent { EditButton() }
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     // Compact, standard filter affordance: an icon menu that
                     // fills in when a non-default filter is active.
