@@ -1,6 +1,7 @@
 import SwiftUI
 import PDFKit
 import ImageIO
+import CoreImage.CIFilterBuiltins
 
 @MainActor @Observable
 final class ComicLibrary {
@@ -82,6 +83,7 @@ actor ComicRenderer {
     static let shared = ComicRenderer()
     private let cache = NSCache<NSString, UIImage>()
     private let documents = NSCache<NSString, PDFDocument>()
+    private let imageContext = CIContext(options: [.cacheIntermediates: false])
     init() {
         cache.totalCostLimit = 64 * 1024 * 1024
         documents.countLimit = 2
@@ -103,7 +105,24 @@ actor ComicRenderer {
                   ] as CFDictionary) {
             image = UIImage(cgImage: cg)
         } else { image = nil }
-        if let image { cache.setObject(image, forKey: page.id as NSString, cost: Int(image.size.width * image.size.height * 4)) }
-        return image
+        guard let image else { return nil }
+        let result = sharpen(image)
+        let cost = result.cgImage.map { $0.bytesPerRow * $0.height } ?? Int(result.size.width * result.size.height * 4)
+        cache.setObject(result, forKey: page.id as NSString, cost: cost)
+        return result
+    }
+
+    /// A restrained unsharp mask strengthens ink edges without changing the source.
+    /// Render once off the main actor and cache the result for smooth page turns.
+    private func sharpen(_ image: UIImage) -> UIImage {
+        guard let cgImage = image.cgImage else { return image }
+        let source = CIImage(cgImage: cgImage)
+        let filter = CIFilter.unsharpMask()
+        filter.inputImage = source.clampedToExtent()
+        filter.radius = 1.2
+        filter.intensity = 0.45
+        guard let output = filter.outputImage,
+              let rendered = imageContext.createCGImage(output, from: source.extent) else { return image }
+        return UIImage(cgImage: rendered, scale: image.scale, orientation: image.imageOrientation)
     }
 }
