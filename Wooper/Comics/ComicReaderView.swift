@@ -13,7 +13,7 @@ struct ComicReaderView: View {
                 ContentUnavailableView("calvin & hobbes", systemImage: "book.closed", description: Text("Your comics will appear here."))
             } else {
                 ComicPageCurl(library: library)
-                    .padding(.bottom, 34)
+                    .ignoresSafeArea(.container, edges: .bottom)
             }
             Button(action: onBack) {
                 Image(systemName: "chevron.left")
@@ -80,6 +80,7 @@ private final class ComicLeafController: UIHostingController<ComicLeaf> {
     init(index: Int, page: ComicPage?) {
         self.index = index
         super.init(rootView: ComicLeaf(page: page, number: index))
+        safeAreaRegions = []
     }
     @MainActor required dynamic init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 }
