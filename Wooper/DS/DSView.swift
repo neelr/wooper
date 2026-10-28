@@ -208,7 +208,7 @@ struct DSView: View {
 }
 
 
-/// The verified Duo playing pose is portraitUpsideDown: its hinge runs horizontally.
+/// Fix gameplay to portrait: charging port down, upper DS display above controls.
 /// Scope the restriction to this window and release it when gameplay disappears.
 @MainActor
 struct DSOrientationLock: UIViewRepresentable {
@@ -217,7 +217,7 @@ struct DSOrientationLock: UIViewRepresentable {
 
     static func orientations(for window: UIWindow?) -> UIInterfaceOrientationMask {
         guard let window, lockedWindows.contains(ObjectIdentifier(window)) else { return .all }
-        return .portraitUpsideDown
+        return .portrait
     }
 
     func makeUIView(context: Context) -> LockView { LockView() }
@@ -249,7 +249,7 @@ struct DSOrientationLock: UIViewRepresentable {
             guard let target else { return }
             DSOrientationLock.lockedWindows.insert(ObjectIdentifier(target))
             target.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-            target.windowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: .portraitUpsideDown))
+            target.windowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
         }
     }
 }
