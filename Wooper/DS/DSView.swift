@@ -397,16 +397,70 @@ struct DSModePresenter: UIViewControllerRepresentable {
         }
     }
 
-    final class ConsoleController: UIHostingController<DSView> {
+    final class ConsoleController: UIViewController {
+        private let console: UIHostingController<DSView>
+
+        init(rootView: DSView) {
+            console = UIHostingController(rootView: rootView)
+            console.safeAreaRegions = []
+            super.init(nibName: nil, bundle: nil)
+        }
+        @MainActor required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
         override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .portrait }
         override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation { .portrait }
         override var prefersInterfaceOrientationLocked: Bool { true }
         override var childForInterfaceOrientationLock: UIViewController? { nil }
+        override var prefersStatusBarHidden: Bool { true }
+        override var prefersHomeIndicatorAutoHidden: Bool { true }
+
+        override func viewDidLoad() {
+            super.viewDidLoad()
+            view.backgroundColor = .black
+            view.clipsToBounds = true
+            addChild(console)
+            console.view.isHidden = true
+            view.addSubview(console.view)
+            console.didMove(toParent: self)
+        }
+
+        override func viewWillAppear(_ animated: Bool) {
+            super.viewWillAppear(animated)
+            setNeedsUpdateOfPrefersInterfaceOrientationLocked()
+            view.setNeedsLayout()
+        }
+
+        override func viewDidLayoutSubviews() {
+            super.viewDidLayoutSubviews()
+            layoutConsole()
+        }
+
+        // Use hardware coordinates rather than the orientation at ROM launch.
+        // UIKit maps touches through this transform, including the touch screen.
+        private func layoutConsole() {
+            guard let screen = view.window?.windowScene?.screen else { return }
+            let fixed = screen.fixedCoordinateSpace
+            let origin = fixed.convert(CGPoint.zero, to: view)
+            let xAxis = fixed.convert(CGPoint(x: 1, y: 0), to: view)
+            let angle = atan2(xAxis.y - origin.y, xAxis.x - origin.x)
+            UIView.performWithoutAnimation {
+                console.view.bounds = CGRect(origin: .zero, size: fixed.bounds.size)
+                console.view.center = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
+                console.view.transform = CGAffineTransform(rotationAngle: angle)
+                console.view.isHidden = false
+            }
+        }
+
+        override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+            super.viewWillTransition(to: size, with: coordinator)
+            coordinator.animate(alongsideTransition: nil) { [weak self] _ in self?.layoutConsole() }
+        }
+
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
             setNeedsUpdateOfSupportedInterfaceOrientations()
             setNeedsUpdateOfPrefersInterfaceOrientationLocked()
-            view.window?.windowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+            layoutConsole()
         }
     }
 }
