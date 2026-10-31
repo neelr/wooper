@@ -1,0 +1,59 @@
+diff --git a/src/DMA.cpp b/src/DMA.cpp
+index e601871..cfd3450 100644
+--- a/src/DMA.cpp
++++ b/src/DMA.cpp
+@@ -79,6 +79,7 @@ void DMA::Reset()
+     Running = false;
+     InProgress = false;
+     MRAMBurstCount = 0;
++    MRAMBurstTable = DMATiming::MRAMDummy;
+ }
+ 
+ void DMA::DoSavestate(Savestate* file)
+@@ -103,6 +104,14 @@ void DMA::DoSavestate(Savestate* file)
+     file->Bool32(&InProgress);
+     file->Bool32(&IsGXFIFODMA);
+     file->Var32(&MRAMBurstCount);
++
++    // Timing table pointers are process-local and absent from legacy states.
++    // Restart the burst so its next unit selects a valid table for this bus.
++    if (!file->Saving)
++    {
++        MRAMBurstCount = 0;
++        MRAMBurstTable = DMATiming::MRAMDummy;
++    }
+ }
+ 
+ void DMA::WriteCnt(u32 val)
+diff --git a/src/GPU3D.cpp b/src/GPU3D.cpp
+index 9c02b2f..216da1b 100644
+--- a/src/GPU3D.cpp
++++ b/src/GPU3D.cpp
+@@ -608,6 +608,13 @@ void DoSavestate(Savestate* file)
+         // better safe than sorry, I guess
+         // might cause a blank frame but atleast it won't shit itself
+         RenderNumPolygons = 0;
++        // Legacy states omit PolygonMode. A saved partial quad combined with
++        // the fresh core's triangle mode can overflow TempVertexBuffer.
++        // Discard only the partial primitive; the next BEGIN restores its mode.
++        VertexNum = 0;
++        VertexNumInPoly = 0;
++        NumConsecutivePolygons = 0;
++        LastStripPolygon = nullptr;
+     }
+ 
+     file->VarArray(CurVertex, sizeof(s16)*3);
+@@ -1424,6 +1431,13 @@ void SubmitPolygon()
+ 
+ void SubmitVertex()
+ {
++    // Never allow a stale/incomplete primitive to write past the staging area.
++    if (VertexNumInPoly >= 4)
++    {
++        VertexNumInPoly = 0;
++        NumConsecutivePolygons = 0;
++        LastStripPolygon = nullptr;
++    }
+     s64 vertex[4] = {(s64)CurVertex[0], (s64)CurVertex[1], (s64)CurVertex[2], 0x1000};
+     Vertex* vertextrans = &TempVertexBuffer[VertexNumInPoly];
+ 

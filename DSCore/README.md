@@ -60,3 +60,21 @@ implemented.
 assembler. It displays a red upper screen and blue lower screen; holding A turns
 the upper screen green. This checks rendering and buttons, not commercial-game
 compatibility. Copy this generated file with the loader above.
+
+## Save-state compatibility patch
+
+The build and smoke-test scripts apply `patches/melonds-resume-state.patch` to the
+pinned core. Legacy save states store a DMA burst count but no process-local
+burst timing table. Restoring them into a newly initialized core could dereference
+an uninitialized pointer. The patch initializes the table and restarts its burst
+on state restore, retaining the existing state format and game progress.
+The old format also omits the active polygon mode; a partial quad could resume as
+a triangle and overflow the vertex buffer. Restore now discards that incomplete
+primitive, and vertex submission checks the staging-buffer boundary.
+
+To exercise a user-provided ROM and state without modifying the originals:
+
+    DS_TEST_ROM=/path/to/game.nds DS_TEST_STATE=/path/to/game.auto.state scripts/test-ds-core.sh
+
+The regression runs in temporary system/save directories, restores the state into
+a fresh core, advances frames, and checks saving and reopening twice.
