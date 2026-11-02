@@ -9,6 +9,7 @@ struct DSView: View {
     var closeGameplay: () -> Void = {}
     private var playing: Bool { gameplay && model.game != nil }
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var importing = false
     @State private var about = false
     @State private var heldButtons: Set<UInt32> = []
@@ -206,6 +207,12 @@ struct DSView: View {
         ds_button(id, true)
     }
 
+    private func releaseButton(_ id: UInt32) {
+        guard heldButtons.remove(id) != nil else { return }
+        ds_button(id, false)
+        DSControlHaptics.release()
+    }
+
     private func releaseButtons() {
         for id in heldButtons { ds_button(id, false) }
         heldButtons.removeAll()
@@ -222,19 +229,23 @@ struct DSView: View {
                     .overlay(RoundedRectangle(cornerRadius: title.count == 1 && "ABXY".contains(title) ? 22 : 6).stroke(controlInk.opacity(0.35), lineWidth: 1))
                     .overlay(RoundedRectangle(cornerRadius: title.count == 1 && "ABXY".contains(title) ? 22 : 6)
                         .strokeBorder(.white.opacity(0.6), lineWidth: 1).padding(1))
-                    .shadow(color: controlInk.opacity(0.55), radius: 1, y: 3)
+                    .shadow(color: controlInk.opacity(0.55), radius: heldButtons.contains(id) ? 0.5 : 1, y: heldButtons.contains(id) ? 0.5 : 3)
                     .shadow(color: .white.opacity(0.65), radius: 1, y: -1)
                     .padding(3)
             }
+            .scaleEffect(heldButtons.contains(id) ? 0.9 : 1)
+            .offset(y: heldButtons.contains(id) ? 2 : 0)
+            .animation(reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.52), value: heldButtons.contains(id))
+            .frame(width: 44, height: 44)
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { _ in pressButton(id) }
-                .onEnded { _ in heldButtons.remove(id); ds_button(id, false) })
+                .onEnded { _ in releaseButton(id) })
             .accessibilityLabel(title).accessibilityAddTraits(.isButton)
             .accessibilityAction {
                 guard !model.paused, !model.busy else { return }
                 pressButton(id)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { heldButtons.remove(id); ds_button(id, false) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { releaseButton(id) }
             }
     }
 }
@@ -261,6 +272,7 @@ private struct DSCross: Shape {
 private struct DSDirectionalPad: View {
     let enabled: Bool
     @State private var pressed: Set<UInt32> = []
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let touchDiameter: CGFloat = 176
     private let ink = Color(red: 0.20, green: 0.39, blue: 0.46)
 
@@ -297,12 +309,17 @@ private struct DSDirectionalPad: View {
                 .rotationEffect(.degrees(Double(direction) * 90))
             }
         }
-        // Keep the molded cross unchanged, but reserve a larger touch target.
+        .scaleEffect(pressed.isEmpty ? 1 : 0.95)
+        .animation(reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.55), value: pressed.isEmpty)
+        // Keep the enlarged touch target stationary while the plastic compresses.
         .frame(width: touchDiameter, height: touchDiameter)
         .contentShape(Circle())
         .gesture(DragGesture(minimumDistance: 0)
             .onChanged { value in update(at: value.location) }
-            .onEnded { _ in release() })
+            .onEnded { _ in
+                if !pressed.isEmpty { DSControlHaptics.release() }
+                release()
+            })
         .onChange(of: enabled) { _, active in if !active { release() } }
         .onDisappear { release() }
         .accessibilityElement(children: .ignore)
@@ -339,17 +356,27 @@ private struct DSDirectionalPad: View {
         guard enabled else { return }
         DSControlHaptics.click()
         ds_button(id, true)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { ds_button(id, false) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            ds_button(id, false)
+            DSControlHaptics.release()
+        }
     }
 }
 
 
 @MainActor
 private enum DSControlHaptics {
-    private static let impact = UIImpactFeedbackGenerator(style: .light)
+    private static let impact = UIImpactFeedbackGenerator(style: .rigid)
+    private static let rebound = UIImpactFeedbackGenerator(style: .medium)
 
     static func click() {
-        impact.impactOccurred(intensity: 0.65)
+        impact.impactOccurred(intensity: 1)
+        rebound.prepare()
+        impact.prepare()
+    }
+
+    static func release() {
+        rebound.impactOccurred(intensity: 0.65)
         impact.prepare()
     }
 }
