@@ -25,8 +25,8 @@ struct StandbyView: View {
     @State private var mapRegion: MKCoordinateRegion?
     @State private var centeredLocation: String?
     private let cream = Color(red: 0.965, green: 0.952, blue: 0.922)
-    private let ink = Color(red: 0.25, green: 0.25, blue: 0.22)
-    private let muted = Color(red: 0.49, green: 0.48, blue: 0.43)
+    private let ink = Color(red: 0.17, green: 0.18, blue: 0.16)
+    private let muted = Color(red: 0.36, green: 0.37, blue: 0.33)
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private var paper: Paper? { data.papers.first { $0.id == paperID } }
@@ -65,7 +65,7 @@ struct StandbyView: View {
         }
         .background(cream.ignoresSafeArea())
         .foregroundStyle(ink)
-        .font(.system(size: 16, design: .monospaced))
+        .font(.system(size: 16, weight: .medium, design: .monospaced))
         .preferredColorScheme(.light)
         .onAppear {
             priorIdleTimer = UIApplication.shared.isIdleTimerDisabled
@@ -118,7 +118,7 @@ struct StandbyView: View {
                     Label("\(Int((battery * 100).rounded()))%", systemImage: charging ? "battery.100percent.bolt" : "battery.\(battery > 0.7 ? 100 : battery > 0.4 ? 50 : battery > 0.15 ? 25 : 0)percent")
                         .accessibilityLabel("Battery \(Int(battery * 100)) percent\(charging ? ", charging" : "")")
                 }
-            }.font(.system(size: 13, design: .monospaced)).foregroundStyle(muted)
+            }.font(.system(size: 13, weight: .medium, design: .monospaced)).foregroundStyle(muted)
             if compact {
                 HStack(alignment: .center, spacing: 24) {
                     clockFace(compact: true).frame(maxWidth: .infinity, alignment: .leading)
@@ -139,18 +139,18 @@ struct StandbyView: View {
                 Link("open-meteo", destination: URL(string: "https://open-meteo.com/")!)
                 Text("·")
                 Link("noaa tides", destination: URL(string: "https://tidesandcurrents.noaa.gov/noaatidepredictions.html?id=9414290")!)
-            }.font(.system(size: 11, design: .monospaced)).foregroundStyle(muted)
+            }.font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(muted)
         }
     }
 
     private func clockFace(compact: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(now, format: .dateTime.hour(.defaultDigits(amPM: .omitted)).minute())
-                .font(.system(size: compact ? 112 : 154, weight: .light, design: .monospaced))
+                .font(.system(size: compact ? 112 : 154, weight: .medium, design: .monospaced))
                 .monospacedDigit().lineLimit(1).minimumScaleFactor(0.45)
                 .accessibilityLabel(now.formatted(date: .omitted, time: .shortened))
             Text(now.formatted(.dateTime.weekday(.wide).month(.wide).day()).lowercased())
-                .font(.system(size: compact ? 19 : 23, design: .monospaced))
+                .font(.system(size: compact ? 19 : 23, weight: .medium, design: .monospaced))
                 .lineLimit(2)
         }
     }
@@ -161,7 +161,7 @@ struct StandbyView: View {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Image(systemName: weather.symbol)
                     Text("\(Int(weather.current.temperature_2m.rounded()))°")
-                        .font(.system(size: 44, weight: .light, design: .monospaced))
+                        .font(.system(size: 44, weight: .medium, design: .monospaced))
                     Text(weather.condition).foregroundStyle(muted)
                 }
                 Text("feels \(Int(weather.current.apparent_temperature.rounded()))°  ↑\(Int(weather.daily.temperature_2m_max.first ?? 0))° ↓\(Int(weather.daily.temperature_2m_min.first ?? 0))°")
@@ -176,7 +176,7 @@ struct StandbyView: View {
             } else {
                 Label(data.weatherError ? "weather unavailable" : "checking the sky…", systemImage: "cloud").foregroundStyle(muted)
             }
-            if data.location == nil { Text("san francisco · approximate location").font(.system(size: 11, design: .monospaced)).foregroundStyle(muted) }
+            if data.location == nil { Text("san francisco · approximate location").font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(muted) }
         }
     }
 
@@ -189,7 +189,7 @@ struct StandbyView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("low tide \(tomorrow ? "tomorrow " : "")\(date.formatted(date: .omitted, time: .shortened).lowercased())")
                         Text("golden gate · \(String(format: "%.1f", Double(low.v) ?? 0)) ft\(data.tideError ? " · cached" : "")")
-                            .font(.system(size: 13, design: .monospaced)).foregroundStyle(muted)
+                            .font(.system(size: 13, weight: .medium, design: .monospaced)).foregroundStyle(muted)
                     }
                 }
             } else {
@@ -237,7 +237,7 @@ struct StandbyView: View {
                         Text(electricOnly ? "e-bikes" : "all bikes").underline()
                     }
                 }.accessibilityLabel(electricOnly ? "Showing e-bikes. Show all bikes" : "Showing all bikes. Show e-bikes")
-            }.font(.system(size: 13, design: .monospaced)).foregroundStyle(muted)
+            }.font(.system(size: 13, weight: .medium, design: .monospaced)).foregroundStyle(muted)
             Map(position: $camera, interactionModes: [.pan, .zoom]) {
                 if let location = data.location {
                     Annotation("you", coordinate: location.coordinate) {
@@ -281,16 +281,16 @@ struct StandbyView: View {
                             Image(systemName: "arrow.up.right")
                         }
                         Text(bike.name.lowercased()).lineLimit(1).minimumScaleFactor(0.8).foregroundStyle(muted)
-                    }.font(.system(size: 13, design: .monospaced))
+                    }.font(.system(size: 13, weight: .medium, design: .monospaced))
                 }.buttonStyle(.plain).disabled(bike.rentalURL == nil)
                 HStack(spacing: 5) {
                     Text("\(bike.electric) electric ·")
                     if let docks = bike.docks { Text("\(docks) docks ·") }
                     Text(bikeAge(bike))
-                }.font(.system(size: 11, design: .monospaced)).foregroundStyle(muted)
+                }.font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(muted)
             } else {
                 Text(data.bikeError ? "bike availability unavailable" : data.bikesUpdated == nil ? "finding bikes…" : "no bikes or stations in this area")
-                    .font(.system(size: 13, design: .monospaced)).foregroundStyle(muted)
+                    .font(.system(size: 13, weight: .medium, design: .monospaced)).foregroundStyle(muted)
             }
         }
     }
@@ -302,24 +302,24 @@ struct StandbyView: View {
                 Spacer()
                 Button { advancePaper() } label: { Image(systemName: "arrow.right").frame(width: 28, height: 28) }
                     .accessibilityLabel("Next bookmark")
-            }.font(.system(size: 13, design: .monospaced)).foregroundStyle(muted)
+            }.font(.system(size: 13, weight: .medium, design: .monospaced)).foregroundStyle(muted)
             if let paper {
                 Button {
                     if let url = URL(string: paper.url) { dismiss(); openURL(url) }
                 } label: {
-                    VStack(alignment: .leading, spacing: 12) {
-                        if !night && !stacked {
-                            GeometryReader { geometry in
-                                PaperThumb(url: paper.url, width: geometry.size.width, height: 95)
-                                    .saturation(0.4).opacity(0.85)
-                            }.frame(height: 95)
+                    VStack(alignment: .leading, spacing: 10) {
+                        GeometryReader { geometry in
+                            PaperThumb(url: paper.url, width: max(1, geometry.size.width),
+                                       height: max(1, geometry.size.height), alignment: .top)
                         }
-                        Text(paper.displayTitle).font(.system(size: stacked ? 21 : 25, weight: .regular, design: .monospaced))
-                            .lineLimit(stacked ? 4 : 5).multilineTextAlignment(.leading)
                         Text((URL(string: paper.url)?.host ?? paper.site ?? "saved link").replacingOccurrences(of: "www.", with: ""))
-                            .font(.system(size: 13, design: .monospaced)).foregroundStyle(muted).lineLimit(1)
-                    }.frame(maxWidth: .infinity, alignment: .leading)
-                }.buttonStyle(.plain).id(paper.id).transition(.opacity)
+                            .font(.system(size: 13, weight: .medium, design: .monospaced))
+                            .foregroundStyle(muted).lineLimit(1)
+                    }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open \(paper.displayTitle)")
+                .id(paper.id).transition(.opacity)
                 GeometryReader { geometry in
                     Rectangle().fill(muted.opacity(0.2)).frame(width: geometry.size.width * max(0, min(1, 1 - nextPaper.timeIntervalSince(now) / 30)), height: 1)
                 }.frame(height: 1).accessibilityHidden(true)

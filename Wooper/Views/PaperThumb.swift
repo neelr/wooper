@@ -10,6 +10,7 @@ struct PaperThumb: View {
     let url: String
     var width: CGFloat = 64
     var height: CGFloat = 48
+    var alignment: Alignment = .center
     @Environment(\.displayScale) private var displayScale
 
     private var cacheKey: String { "\(url)|\(Int(max(width, height) * displayScale))" }
@@ -30,7 +31,7 @@ struct PaperThumb: View {
                     .fill(Color.paperyMeta.opacity(failed ? 0.06 : 0.14))
             }
         }
-        .frame(width: width, height: height)
+        .frame(width: width, height: height, alignment: alignment)
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .overlay(
             RoundedRectangle(cornerRadius: 6)
