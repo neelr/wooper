@@ -1,5 +1,4 @@
 import SwiftUI
-import Combine
 import MapKit
 
 struct StandbyView: View {
@@ -28,7 +27,6 @@ struct StandbyView: View {
     private let cream = Color(red: 0.965, green: 0.952, blue: 0.922)
     private let ink = Color(red: 0.17, green: 0.18, blue: 0.16)
     private let muted = Color(red: 0.36, green: 0.37, blue: 0.33)
-    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private var paper: Paper? { data.papers.first { $0.id == paperID } }
     private var nearby: [StandbyBike] {
@@ -104,13 +102,26 @@ struct StandbyView: View {
                 do { try await Task.sleep(for: .seconds(300)) } catch { return }
             }
         }
-        .onChange(of: electricOnly) { _, _ in selectedBikeID = nil }
-        .onReceive(timer) { date in
+        .task(id: scenePhase) {
             guard scenePhase == .active else { return }
-            now = date; updateBattery(); updateBrightness()
-            if trigger.policy.touching || date.timeIntervalSince(trigger.policy.lastInteraction) < 2 {
-                nextPaper = date.addingTimeInterval(30)
-            } else if date >= nextPaper { advancePaper() }
+            while !Task.isCancelled {
+                await data.refreshPlayback()
+                do { try await Task.sleep(for: .seconds(15)) } catch { return }
+            }
+        }
+        .onChange(of: electricOnly) { _, _ in selectedBikeID = nil }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            // A task follows the view's identity. A publisher created in this
+            // view's initializer can be replaced on every parent idle tick.
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(1)) } catch { return }
+                let date = Date()
+                now = date; updateBattery(); updateBrightness()
+                if trigger.policy.touching || date.timeIntervalSince(trigger.policy.lastInteraction) < 2 {
+                    nextPaper = date.addingTimeInterval(30)
+                } else if date >= nextPaper { advancePaper() }
+            }
         }
     }
 
@@ -125,10 +136,12 @@ struct StandbyView: View {
                         contextPanel
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }
+                nowPlayingPanel
             } else {
                 clockFace(compact: false)
                 Spacer(minLength: 8)
                 weatherPanel
+                nowPlayingPanel
                 Spacer(minLength: 8)
                 VStack(alignment: .leading, spacing: 16) {
                     Rectangle().fill(muted.opacity(0.2)).frame(height: 0.5)
@@ -149,6 +162,37 @@ struct StandbyView: View {
             }
             .font(.system(size: 13, weight: .medium, design: .monospaced))
             .foregroundStyle(muted)
+        }
+    }
+
+    @ViewBuilder private var nowPlayingPanel: some View {
+        if let playback = data.playback,
+           playback.isVisible(now: now, receivedAt: data.playbackReceivedAt) {
+            Button {
+                if let raw = playback.url, let url = URL(string: raw), url.scheme == "https" { openURL(url) }
+            } label: {
+                HStack(spacing: 12) {
+                    AsyncImage(url: playback.albumArt.flatMap(URL.init(string:))) { image in
+                        image.resizable().scaledToFill()
+                    } placeholder: {
+                        Image(systemName: "music.note").frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(muted.opacity(0.08))
+                    }
+                    .frame(width: 52, height: 52).clipShape(RoundedRectangle(cornerRadius: 5))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(playback.song ?? "")
+                            .font(.system(size: 15, weight: .medium, design: .monospaced))
+                            .foregroundStyle(ink).lineLimit(1)
+                        if let artist = playback.artist {
+                            Text(artist).font(.system(size: 12, weight: .medium, design: .monospaced)).lineLimit(1)
+                        }
+                        Text("spotify · \(playback.device?.name ?? "playing")")
+                            .font(.system(size: 10, weight: .medium, design: .monospaced)).lineLimit(1)
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .foregroundStyle(muted).contentShape(Rectangle())
+            }.buttonStyle(.plain)
+            .accessibilityLabel("Playing \(playback.song ?? "") by \(playback.artist ?? "") on \(playback.device?.name ?? "Spotify"). Open in Spotify")
         }
     }
 

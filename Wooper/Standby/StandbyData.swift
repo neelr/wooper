@@ -15,6 +15,8 @@ final class StandbyData: NSObject, @preconcurrency CLLocationManagerDelegate {
     var bikeError = false
     var weatherError = false
     var tideError = false
+    var playback: StandbyPlayback?
+    var playbackReceivedAt: Date?
     var papers: [Paper] = []
     var paperError = false
     var loadedPapers = false
@@ -68,6 +70,19 @@ final class StandbyData: NSObject, @preconcurrency CLLocationManagerDelegate {
         }
         await bikeWork
     }
+    func refreshPlayback() async {
+        do {
+            let result: StandbyPlayback = try await Self.fetch("https://neelr.dev/api/spotify")
+            guard !Task.isCancelled else { return }
+            playback = result
+            playbackReceivedAt = Date()
+        } catch {
+            guard !Task.isCancelled else { return }
+            playback = nil
+            playbackReceivedAt = nil
+        }
+    }
+
     func loadPapers() async {
         do {
             let result = try await PaperyService.list(read: "unread", liked: false, query: "")

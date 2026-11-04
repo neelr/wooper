@@ -16,7 +16,7 @@ struct AppShell: View {
     @State private var standby = StandbyTrigger()
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private let standbyClock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    @State private var standbyClock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     private var supportsDS: Bool { Self.isDuo && sizeClass == .regular }
 
     enum Tab { case papery, record, home, ds, comics }
