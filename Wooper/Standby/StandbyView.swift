@@ -10,6 +10,7 @@ struct StandbyView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
     @State private var data = StandbyData()
+    @State private var revealed = false
     @State private var deck = StandbyDeck()
     @State private var paperID: Int?
     @State private var nextPaper = Date().addingTimeInterval(30)
@@ -58,16 +59,20 @@ struct StandbyView: View {
                     .padding(padding)
                     .frame(width: panelWidth, height: panelHeight)
                 companionPanel(height: panelHeight - padding * 2, wide: stacked)
-                    .padding(padding)
+                    .padding(.vertical, padding)
+                    .padding(.horizontal, stacked ? padding : 0)
                     .frame(width: panelWidth, height: panelHeight)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .opacity(revealed ? 1 : 0)
+            .offset(y: revealed || reduceMotion ? 0 : 8)
         }
         .background(cream.ignoresSafeArea())
         .foregroundStyle(ink)
         .font(.system(size: 16, weight: .medium, design: .monospaced))
         .preferredColorScheme(.light)
         .onAppear {
+            withAnimation(.easeOut(duration: reduceMotion ? 0.2 : 0.65)) { revealed = true }
             priorIdleTimer = UIApplication.shared.isIdleTimerDisabled
             priorBatteryMonitoring = UIDevice.current.isBatteryMonitoringEnabled
             UIDevice.current.isBatteryMonitoringEnabled = true
@@ -213,9 +218,9 @@ struct StandbyView: View {
     private func companionPanel(height: CGFloat, wide: Bool) -> some View {
         let layout = wide ? AnyLayout(HStackLayout(alignment: .top, spacing: 24)) : AnyLayout(VStackLayout(spacing: 22))
         return layout {
-            bikePanel(mapHeight: max(95, wide ? height - 125 : height * 0.40))
+            bikePanel(mapHeight: max(95, wide ? height - 125 : height * 0.34))
+                .padding(.horizontal, wide ? 0 : 20)
                 .frame(maxWidth: .infinity, maxHeight: wide ? .infinity : nil, alignment: .top)
-            if !wide { Rectangle().fill(muted.opacity(0.2)).frame(height: 0.5) }
             bookmarkPanel
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
@@ -297,12 +302,6 @@ struct StandbyView: View {
 
     private var bookmarkPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("from your unread pile").tracking(0.4)
-                Spacer()
-                Button { advancePaper() } label: { Image(systemName: "arrow.right").frame(width: 28, height: 28) }
-                    .accessibilityLabel("Next bookmark")
-            }.font(.system(size: 13, weight: .medium, design: .monospaced)).foregroundStyle(muted)
             if let paper {
                 Button {
                     if let url = URL(string: paper.url) { dismiss(); openURL(url) }
@@ -312,14 +311,22 @@ struct StandbyView: View {
                             PaperThumb(url: paper.url, width: max(1, geometry.size.width),
                                        height: max(1, geometry.size.height), alignment: .top)
                         }
-                        Text((URL(string: paper.url)?.host ?? paper.site ?? "saved link").replacingOccurrences(of: "www.", with: ""))
-                            .font(.system(size: 13, weight: .medium, design: .monospaced))
-                            .foregroundStyle(muted).lineLimit(1)
                     }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Open \(paper.displayTitle)")
                 .id(paper.id).transition(.opacity)
+                HStack {
+                    Text((URL(string: paper.url)?.host ?? paper.site ?? "saved link").replacingOccurrences(of: "www.", with: ""))
+                        .lineLimit(1)
+                    Spacer()
+                    Button { advancePaper() } label: {
+                        Image(systemName: "arrow.right").frame(width: 32, height: 24)
+                    }.accessibilityLabel("Next bookmark")
+                }
+                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                .foregroundStyle(muted)
+                .padding(.horizontal, stacked ? 0 : 20)
                 GeometryReader { geometry in
                     Rectangle().fill(muted.opacity(0.2)).frame(width: geometry.size.width * max(0, min(1, 1 - nextPaper.timeIntervalSince(now) / 30)), height: 1)
                 }.frame(height: 1).accessibilityHidden(true)

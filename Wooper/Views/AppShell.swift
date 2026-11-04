@@ -35,6 +35,10 @@ struct AppShell: View {
 
     var body: some View {
         navigationTabs
+            .allowsHitTesting(!standby.visible)
+            .accessibilityHidden(standby.visible)
+            .opacity(standby.visible ? 0 : 1)
+            .blur(radius: standby.visible && !reduceMotion ? 3 : 0)
             .background {
                 if #available(iOS 27.1, *) {
                     ComicModePresenter(active: selectedTab == .comics && supportsDS) {
@@ -54,7 +58,7 @@ struct AppShell: View {
             }
         }
         .statusBarHidden(standby.visible)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.35), value: standby.visible)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.65), value: standby.visible)
         .onReceive(standbyClock) { date in
             guard scenePhase == .active else { return }
             standby.policy.tick(eligible: Self.isDuo && supportsDS && selectedTab == .papery &&
