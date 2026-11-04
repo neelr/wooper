@@ -158,24 +158,27 @@ struct StandbyView: View {
     }
 
     private func tentClockPanel(height: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(now, format: .dateTime.hour(.defaultDigits(amPM: .omitted)).minute())
-                    .font(.system(size: min(112, height * 0.33), weight: .medium, design: .monospaced))
-                    .monospacedDigit().lineLimit(1).minimumScaleFactor(0.5)
-                    .accessibilityLabel(now.formatted(date: .omitted, time: .shortened))
-                Text(now.formatted(.dateTime.weekday(.wide).month(.wide).day()).lowercased())
-                    .font(.system(size: 14, weight: .medium, design: .monospaced))
-                    .lineLimit(1).minimumScaleFactor(0.8)
-                nowPlayingPanel(compact: true).padding(.top, 8)
+        let dense = height < 380 || data.playback?.isVisible(now: now, receivedAt: data.playbackReceivedAt) == true
+        return VStack(alignment: .leading, spacing: 0) {
+            Spacer(minLength: 12)
+            VStack(alignment: .leading, spacing: dense ? 16 : 26) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(now, format: .dateTime.hour(.defaultDigits(amPM: .omitted)).minute())
+                        .font(.system(size: min(112, height * 0.33), weight: .medium, design: .monospaced))
+                        .monospacedDigit().lineLimit(1).minimumScaleFactor(0.5)
+                        .accessibilityLabel(now.formatted(date: .omitted, time: .shortened))
+                    Text(now.formatted(.dateTime.weekday(.wide).month(.wide).day()).lowercased())
+                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                    nowPlayingPanel(compact: true).padding(.top, 8)
+                }
+                VStack(alignment: .leading, spacing: dense ? 14 : 20) {
+                    tentWeatherPanel
+                    tentBikeRow
+                    tentConditions
+                }
             }
-            Spacer(minLength: 14)
-            tentWeatherPanel
-            Spacer(minLength: 14)
-            tentBikeRow
-            Spacer(minLength: 14)
-            tentConditions
-            Spacer(minLength: 14)
+            Spacer(minLength: 12)
             HStack(spacing: 5) {
                 Link("open-meteo", destination: URL(string: "https://open-meteo.com/")!)
                 Text("·")
