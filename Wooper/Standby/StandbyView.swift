@@ -53,11 +53,9 @@ struct StandbyView: View {
     private var batterySymbol: String {
         charging ? "battery.100percent.bolt" : "battery.\(battery > 0.7 ? 100 : battery > 0.4 ? 50 : battery > 0.15 ? 25 : 0)percent"
     }
-    private var rainText: String {
-        guard now.timeIntervalSince(data.weatherUpdated ?? .distantPast) <= 1800 else {
-            return "rain timing unavailable"
-        }
-        return data.weather?.rainSummary(now: now) ?? "rain timing unavailable"
+    private var rainText: String? {
+        guard now.timeIntervalSince(data.weatherUpdated ?? .distantPast) <= 1800 else { return nil }
+        return data.weather?.rainSummary(now: now)
     }
 
     var body: some View {
@@ -105,7 +103,7 @@ struct StandbyView: View {
         .task(id: "\(scenePhase)-\(data.locationKey)-\(compactScreen)") {
             guard scenePhase == .active else { return }
             while !Task.isCancelled {
-                await data.refresh(includeBikes: !compactScreen)
+                await data.refresh()
                 if !compactScreen { centerMapIfNeeded() }
                 do { try await Task.sleep(for: .seconds(60)) } catch { return }
             }
@@ -160,35 +158,24 @@ struct StandbyView: View {
     }
 
     private func tentClockPanel(height: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text(now, format: .dateTime.hour(.defaultDigits(amPM: .omitted)).minute())
-                .font(.system(size: min(112, height * 0.33), weight: .medium, design: .monospaced))
-                .monospacedDigit().lineLimit(1).minimumScaleFactor(0.5)
-                .accessibilityLabel(now.formatted(date: .omitted, time: .shortened))
-            Text(now.formatted(.dateTime.weekday(.wide).month(.wide).day()).lowercased())
-                .font(.system(size: 14, weight: .medium, design: .monospaced))
-                .lineLimit(1).minimumScaleFactor(0.8)
-            nowPlayingPanel(compact: true).padding(.top, 3)
-            Spacer(minLength: 0)
-            if let weather = data.weather {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Image(systemName: weather.symbol)
-                    Text("\(Int(weather.current.temperature_2m.rounded()))°")
-                        .font(.system(size: 26, weight: .medium, design: .monospaced))
-                    Text(weather.condition).foregroundStyle(muted)
-                }.font(.system(size: 13, weight: .medium, design: .monospaced))
-                Text(rainText).font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .foregroundStyle(muted).lineLimit(1).minimumScaleFactor(0.8)
-            } else {
-                Text(data.weatherError ? "weather unavailable" : "checking the sky…")
-                    .font(.system(size: 12, weight: .medium, design: .monospaced)).foregroundStyle(muted)
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(now, format: .dateTime.hour(.defaultDigits(amPM: .omitted)).minute())
+                    .font(.system(size: min(112, height * 0.33), weight: .medium, design: .monospaced))
+                    .monospacedDigit().lineLimit(1).minimumScaleFactor(0.5)
+                    .accessibilityLabel(now.formatted(date: .omitted, time: .shortened))
+                Text(now.formatted(.dateTime.weekday(.wide).month(.wide).day()).lowercased())
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .lineLimit(1).minimumScaleFactor(0.8)
+                nowPlayingPanel(compact: true).padding(.top, 8)
             }
-            if data.location == nil {
-                Text("san francisco · approximate location")
-                    .font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundStyle(muted)
-            }
-            Spacer(minLength: 0)
+            Spacer(minLength: 14)
+            tentWeatherPanel
+            Spacer(minLength: 14)
+            tentBikeRow
+            Spacer(minLength: 14)
             tentConditions
+            Spacer(minLength: 14)
             HStack(spacing: 5) {
                 Link("open-meteo", destination: URL(string: "https://open-meteo.com/")!)
                 Text("·")
@@ -200,7 +187,63 @@ struct StandbyView: View {
                 }
             }
             .font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundStyle(muted)
-            .padding(.top, 3)
+        }
+    }
+
+    private var tentWeatherPanel: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let weather = data.weather {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: weather.symbol)
+                    Text("\(Int(weather.current.temperature_2m.rounded()))°")
+                        .font(.system(size: 26, weight: .medium, design: .monospaced))
+                    Text(weather.condition).foregroundStyle(muted)
+                }.font(.system(size: 13, weight: .medium, design: .monospaced))
+                if let rainText {
+                    Text(rainText).font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(muted).lineLimit(1).minimumScaleFactor(0.8)
+                }
+            } else {
+                Text(data.weatherError ? "weather unavailable" : "checking the sky…")
+                    .font(.system(size: 12, weight: .medium, design: .monospaced)).foregroundStyle(muted)
+            }
+            if data.location == nil {
+                Text("san francisco · approximate location")
+                    .font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundStyle(muted)
+            }
+        }
+    }
+
+    @ViewBuilder private var tentBikeRow: some View {
+        if let bike = StandbyBike.nearestAvailable(data.bikes, center: data.coordinate, electricOnly: false).first {
+            Button {
+                if let url = bike.rentalURL { openURL(url) }
+            } label: {
+                HStack(alignment: .center, spacing: 9) {
+                    Image(systemName: "bicycle").font(.system(size: 18, weight: .medium))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("lyft · \(bikeSummary(bike))")
+                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .lineLimit(1).minimumScaleFactor(0.8)
+                        Text(bike.name.lowercased())
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .foregroundStyle(muted).lineLimit(1)
+                        if data.bikeError || now.timeIntervalSince(bike.reported) >= 300 {
+                            Text(bikeAge(bike))
+                                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                                .foregroundStyle(muted).lineLimit(1)
+                        }
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "arrow.up.right").font(.system(size: 10))
+                }
+                .foregroundStyle(ink).contentShape(Rectangle())
+                .padding(.vertical, 5)
+            }
+            .buttonStyle(.plain).disabled(bike.rentalURL == nil)
+            .accessibilityLabel("Lyft, \(bikeSummary(bike)), \(bike.name). Open in Lyft")
+        } else {
+            Label(data.bikeError ? "lyft bikes unavailable" : data.bikesUpdated == nil ? "finding lyft bikes…" : "no nearby lyft bikes", systemImage: "bicycle")
+                .font(.system(size: 12, weight: .medium, design: .monospaced)).foregroundStyle(muted)
         }
     }
 
@@ -350,7 +393,7 @@ struct StandbyView: View {
                 if weather.current.wind_speed_10m >= 8 {
                     Text("wind \(Int(weather.current.wind_speed_10m.rounded())) · gusts \(Int(weather.current.wind_gusts_10m.rounded())) mph").foregroundStyle(muted)
                 }
-                Text(rainText).foregroundStyle(muted)
+                if let rainText { Text(rainText).foregroundStyle(muted) }
                 if data.weatherError || now.timeIntervalSince(data.weatherUpdated ?? .distantPast) > 1800 {
                     Text("weather may be out of date").foregroundStyle(muted)
                 }

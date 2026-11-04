@@ -24,11 +24,11 @@ import CoreLocation
         }
         assert(rainForecast([0, 1, 0]).rainSummary(now: start.addingTimeInterval(300)) == "rain easing in ~10 min")
         assert(rainForecast([0, 1, 1]).rainSummary(now: start) == "rain continuing")
-        assert(rainForecast(Array(repeating: 0, count: 9)).rainSummary(now: start) == "no rain in the next 2 hr")
-        assert(rainForecast([1, 0, 0]).rainSummary(now: start) == "no rain in the next 30 min",
+        assert(rainForecast(Array(repeating: 0, count: 9)).rainSummary(now: start) == nil, "Hide the rain line when the forecast is dry")
+        assert(rainForecast([1, 0, 0]).rainSummary(now: start) == nil,
                "Rain in an elapsed interval must not be described as ongoing")
         assert(rainForecast([0, nil, 1]).rainSummary(now: start) == nil, "Missing current coverage is not dry weather")
-        assert(rainForecast([0, 1], offsets: [900, 2700]).rainSummary(now: start) == "no rain in the next 15 min",
+        assert(rainForecast([0, 1], offsets: [900, 2700]).rainSummary(now: start) == nil,
                "Do not predict across a gap in the forecast")
         let freeJSON = #"{"bikes":[{"bike_id":"regular","lat":37.7,"lon":-122.4,"is_reserved":0,"is_disabled":0,"type":"classic_bike"},{"bike_id":"electric","lat":37.7,"lon":-122.4,"is_reserved":0,"is_disabled":0,"type":"electric_bike"}]}"#
         let types = try decoder.decode(FreeBikes.self, from: Data(freeJSON.utf8))

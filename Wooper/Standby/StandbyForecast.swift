@@ -72,9 +72,7 @@ struct StandbyWeather: Decodable {
         if let rain = bins.first(where: { $0.amount >= 0.1 }) {
             return "rain in ~\(Self.rainDelay(rain.end - 900 - epoch))"
         }
-        let dryMinutes = Int(((bins.last?.end ?? epoch) - epoch) / 60)
-        if dryMinutes >= 120 { return "no rain in the next 2 hr" }
-        return "no rain in the next \(max(1, dryMinutes / 5 * 5)) min"
+        return nil
     }
 
     private static func rainDelay(_ seconds: Double) -> String {

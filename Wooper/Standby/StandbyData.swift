@@ -56,12 +56,12 @@ final class StandbyData: NSObject, @preconcurrency CLLocationManagerDelegate {
     }
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
 
-    func refresh(includeBikes: Bool = true) async {
+    func refresh() async {
         let coordinate = coordinate
         let moved = lastCoordinate.map {
             CLLocation(latitude: $0.latitude, longitude: $0.longitude).distance(from: CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)) > 1000
         } ?? true
-        async let bikeWork: () = refreshBikes(enabled: includeBikes)
+        async let bikeWork: () = refreshBikes()
         if moved || weatherError || tideError || Date().timeIntervalSince(lastConditions) >= 900 {
             async let weatherWork: () = refreshWeather(coordinate)
             async let tideWork: () = refreshTides()
@@ -112,8 +112,7 @@ final class StandbyData: NSObject, @preconcurrency CLLocationManagerDelegate {
             tides = result; tideError = false
         } catch { if !Task.isCancelled { tideError = true } }
     }
-    private func refreshBikes(enabled: Bool) async {
-        guard enabled else { return }
+    private func refreshBikes() async {
         do {
             let base = "https://gbfs.lyft.com/gbfs/1.1/bay/en/"
             if information == nil || Date().timeIntervalSince(informationDate) > 86400 {
