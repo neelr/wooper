@@ -1,0 +1,24 @@
+# Papery standby
+
+On Duo (iPhone19,4 / iOS 27.1), the main Papery tab enters standby after 15 seconds idle with `UIHinge.Status.partiallyOpen`. Opening flat or closing exits immediately. The small back chevron suppresses automatic re-entry until the next hinge-status change. DS, comics, keyboard entry, presented sheets, background scenes, and held touches cannot trigger entry. A passive window gesture recognizer resets the idle deadline without taking over list gestures.
+
+The physical hinge axis, converted from the screen's fixed coordinate space, chooses side-by-side book panels or stacked tabletop panels. The cream canvas uses Papery's monospace typography. The clock/date and battery stay in place; unread bookmarks shuffle without replacement every 30 seconds, pausing during interaction. Tapping a bookmark returns to Papery and opens its URL. Thumbnails are hidden from 22:00 to 06:00 and brightness is capped at 15% while active; prior brightness, battery monitoring, and idle-timer settings are restored on exit. The display stays awake only while standby is active.
+
+Location is requested on first entry, used only while standby is active, and stopped in inactive scenes. Without access, weather/map use a clearly labeled central-SF fallback; no user dot or walking estimate is shown. Bike distances use a straight-line estimate with a 1.3 route allowance and 80 m/min walking pace; the UI labels time approximate. Pins select a bike/station, and the detail opens the feed's official Lyft rental URL (not a booking).
+
+Data providers:
+- Weather: https://open-meteo.com/en/docs — local conditions, highs/lows, wind, sunset, and approximate 15-minute precipitation timing; refreshed every 15 minutes (retry every minute on error).
+- Tides: https://api.tidesandcurrents.noaa.gov/api/prod/ — station 9414290 (San Francisco/Golden Gate), high/low predictions, feet relative to MLLW; GMT timestamps parsed explicitly. This is not an Ocean Beach-specific prediction. Shows the next future low, labeling tomorrow when applicable.
+- Bikes: https://gbfs.lyft.com/gbfs/1.1/bay/gbfs.json — station information, station status, and free-bike status. Availability refreshed every minute; disabled/reserved bikes and non-renting stations excluded. Six nearby matches within 5 km; e-bikes by default, toggle to all bikes. Counts older than five minutes are visibly stale. MapKit provides the native map and its attribution.
+
+All polling tasks cancel with the standby view or inactive scene. No camera session is needed. No background location permission, new credentials, or provider API keys are used.
+
+Validation:
+```
+swiftc Wooper/Standby/StandbyPolicy.swift tests/StandbyPolicyTests.swift -o /tmp/standby-policy-tests
+/tmp/standby-policy-tests
+swiftc Wooper/Standby/StandbyForecast.swift tests/StandbyForecastTests.swift -o /tmp/standby-forecast-tests
+/tmp/standby-forecast-tests
+```
+
+The forecast test optionally accepts a directory with captured `standby-weather.json`, `bay-station_status.json`, `bay-station_information.json`, and `bay-free_bike_status.json` provider responses to check live schemas. The full app is built with the usual Wooper device scheme; real hinge behavior requires Duo hardware.

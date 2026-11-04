@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import SwiftData
 import Darwin
 
@@ -12,6 +13,10 @@ struct AppShell: View {
 
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var ds = DSModel()
+    @State private var standby = StandbyTrigger()
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private let standbyClock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     private var supportsDS: Bool { Self.isDuo && sizeClass == .regular }
 
     enum Tab { case papery, record, home, ds, comics }
@@ -37,6 +42,29 @@ struct AppShell: View {
                     }
                 }
             }
+        .background {
+            if #available(iOS 27.1, *), Self.isDuo {
+                StandbySensor(trigger: standby)
+            }
+        }
+        .overlay {
+            if standby.visible {
+                StandbyView(stacked: standby.stacked, trigger: standby) { standby.policy.dismiss() }
+                    .transition(.opacity)
+            }
+        }
+        .statusBarHidden(standby.visible)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.35), value: standby.visible)
+        .onReceive(standbyClock) { date in
+            guard scenePhase == .active else { return }
+            standby.policy.tick(eligible: Self.isDuo && supportsDS && selectedTab == .papery &&
+                !standby.keyboardVisible && standby.canPresent, now: date)
+        }
+        .onChange(of: selectedTab) { _, _ in standby.policy.leave() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { standby.policy.leave() }
+            if phase == .active { standby.policy.interact() }
+        }
         .onChange(of: supportsDS) { _, supported in
             if !supported, selectedTab == .comics { selectedTab = .papery }
         }
