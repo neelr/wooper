@@ -20,7 +20,6 @@ struct StandbyView: View {
     @State private var priorIdleTimer = false
     @State private var priorBrightness: CGFloat?
     @State private var brightnessScreen: UIScreen?
-    @State private var tentPage = 0
     @State private var electricOnly = false
     @State private var selectedBikeID: String?
     @State private var camera: MapCameraPosition
@@ -53,6 +52,12 @@ struct StandbyView: View {
     private var night: Bool { let hour = Calendar.current.component(.hour, from: now); return hour >= 22 || hour < 6 }
     private var batterySymbol: String {
         charging ? "battery.100percent.bolt" : "battery.\(battery > 0.7 ? 100 : battery > 0.4 ? 50 : battery > 0.15 ? 25 : 0)percent"
+    }
+    private var rainText: String {
+        guard now.timeIntervalSince(data.weatherUpdated ?? .distantPast) <= 1800 else {
+            return "rain timing unavailable"
+        }
+        return data.weather?.rainSummary(now: now) ?? "rain timing unavailable"
     }
 
     var body: some View {
@@ -97,11 +102,11 @@ struct StandbyView: View {
             if phase == .active { activate(); nextPaper = Date().addingTimeInterval(30) }
             else { data.stopLocation(); UIApplication.shared.isIdleTimerDisabled = priorIdleTimer; restoreBrightness() }
         }
-        .task(id: "\(scenePhase)-\(data.locationKey)") {
+        .task(id: "\(scenePhase)-\(data.locationKey)-\(compactScreen)") {
             guard scenePhase == .active else { return }
             while !Task.isCancelled {
-                await data.refresh()
-                centerMapIfNeeded()
+                await data.refresh(includeBikes: !compactScreen)
+                if !compactScreen { centerMapIfNeeded() }
                 do { try await Task.sleep(for: .seconds(60)) } catch { return }
             }
         }
@@ -147,35 +152,11 @@ struct StandbyView: View {
         return HStack(spacing: 24) {
             tentClockPanel(height: height)
                 .frame(width: width * 0.48, height: height, alignment: .topLeading)
-            VStack(spacing: 10) {
-                TabView(selection: $tentPage) {
-                    bookmarkPanel.tag(0)
-                    bikePanel(mapHeight: max(85, height - 140)).tag(1)
-                }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-                HStack(spacing: 16) {
-                    tentPageButton("bookmarks", page: 0)
-                    tentPageButton("bikes", page: 1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(width: width * 0.52, height: height)
+            bookmarkPanel
+                .frame(width: width * 0.52, height: height)
         }
         .padding(.top, top).padding(.bottom, bottom)
         .padding(.leading, leading).padding(.trailing, trailing)
-    }
-
-    private func tentPageButton(_ title: String, page: Int) -> some View {
-        Button {
-            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) { tentPage = page }
-        } label: {
-            Text(title).underline(tentPage == page)
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundStyle(tentPage == page ? ink : muted)
-                .padding(.vertical, 6).contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(tentPage == page ? .isSelected : [])
     }
 
     private func tentClockPanel(height: CGFloat) -> some View {
@@ -196,10 +177,8 @@ struct StandbyView: View {
                         .font(.system(size: 26, weight: .medium, design: .monospaced))
                     Text(weather.condition).foregroundStyle(muted)
                 }.font(.system(size: 13, weight: .medium, design: .monospaced))
-                if let rain = weather.rainSummary(now: now) {
-                    Text(rain).font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundStyle(muted).lineLimit(1).minimumScaleFactor(0.8)
-                }
+                Text(rainText).font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(muted).lineLimit(1).minimumScaleFactor(0.8)
             } else {
                 Text(data.weatherError ? "weather unavailable" : "checking the sky…")
                     .font(.system(size: 12, weight: .medium, design: .monospaced)).foregroundStyle(muted)
@@ -371,7 +350,7 @@ struct StandbyView: View {
                 if weather.current.wind_speed_10m >= 8 {
                     Text("wind \(Int(weather.current.wind_speed_10m.rounded())) · gusts \(Int(weather.current.wind_gusts_10m.rounded())) mph").foregroundStyle(muted)
                 }
-                if let rain = weather.rainSummary(now: now) { Label(rain, systemImage: "cloud.rain") }
+                Text(rainText).foregroundStyle(muted)
                 if data.weatherError || now.timeIntervalSince(data.weatherUpdated ?? .distantPast) > 1800 {
                     Text("weather may be out of date").foregroundStyle(muted)
                 }

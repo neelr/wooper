@@ -49,20 +49,40 @@ struct StandbyWeather: Decodable {
     }
     func rainSummary(now: Date) -> String? {
         guard let forecast = minutely_15 else { return nil }
-        let next = zip(forecast.time, forecast.precipitation).filter {
-            $0.0 >= now.timeIntervalSince1970 - 900 && $0.0 < now.timeIntervalSince1970 + 6 * 3600
+        let epoch = now.timeIntervalSince1970
+        // Precipitation is the sum for the 15 minutes ENDING at each timestamp.
+        // Require continuous, known coverage; a missing value is not dry weather.
+        let future = zip(forecast.time, forecast.precipitation)
+            .filter { $0.0 > epoch && $0.0 <= epoch + 6 * 3600 }
+            .sorted { $0.0 < $1.0 }
+        guard let first = future.first, first.0 - 900 <= epoch else { return nil }
+        var bins: [(end: Double, amount: Double)] = []
+        for (end, amount) in future {
+            guard let amount, amount.isFinite, amount >= 0 else { break }
+            if let previous = bins.last, abs(end - previous.end - 900) > 1 { break }
+            bins.append((end, amount))
         }
-        guard let first = next.first else { return nil }
-        if let amount = first.1, amount >= 0.1 {
-            if let end = next.dropFirst().first(where: { ($0.1 ?? 1) < 0.1 }) {
-                return "rain easing around \(Self.time(end.0))"
+        guard let current = bins.first else { return nil }
+        if current.amount >= 0.1 {
+            if let dry = bins.dropFirst().first(where: { $0.amount < 0.1 }) {
+                return "rain easing in ~\(Self.rainDelay(dry.end - 900 - epoch))"
             }
-            return "rain for the next few hours"
+            return "rain continuing"
         }
-        if let rain = next.first(where: { ($0.1 ?? 0) >= 0.1 }) {
-            return "rain around \(Self.time(rain.0))"
+        if let rain = bins.first(where: { $0.amount >= 0.1 }) {
+            return "rain in ~\(Self.rainDelay(rain.end - 900 - epoch))"
         }
-        return nil
+        let dryMinutes = Int(((bins.last?.end ?? epoch) - epoch) / 60)
+        if dryMinutes >= 120 { return "no rain in the next 2 hr" }
+        return "no rain in the next \(max(1, dryMinutes / 5 * 5)) min"
+    }
+
+    private static func rainDelay(_ seconds: Double) -> String {
+        // The forecast has quarter-hour resolution; keep the countdown approximate.
+        let minutes = max(5, Int(ceil(seconds / 300)) * 5)
+        if minutes < 120 { return "\(minutes) min" }
+        let remainder = minutes % 60
+        return "\(minutes / 60) hr" + (remainder == 0 ? "" : " \(remainder) min")
     }
     static func time(_ epoch: Double) -> String {
         Date(timeIntervalSince1970: epoch).formatted(date: .omitted, time: .shortened).lowercased()

@@ -11,10 +11,25 @@ import CoreLocation
         assert(tides.nextLow(after: iso.date(from: "2026-11-04T09:01:00Z")!)?.t == "2026-11-04 21:59")
         assert(tides.nextLow(after: iso.date(from: "2026-11-05T09:01:00Z")!) == nil)
         let start = Date(timeIntervalSince1970: 1793781000)
-        let weather = StandbyWeather(current: .init(temperature_2m: 55, apparent_temperature: 52, weather_code: 45, wind_speed_10m: 10, wind_gusts_10m: 15, is_day: 1), daily: .init(time: [], temperature_2m_max: [], temperature_2m_min: [], sunset: []), minutely_15: .init(time: [start.timeIntervalSince1970, start.timeIntervalSince1970 + 900], precipitation: [0, 1]))
-        assert(weather.rainSummary(now: start)?.hasPrefix("rain around") == true)
+        let weather = StandbyWeather(current: .init(temperature_2m: 55, apparent_temperature: 52, weather_code: 45, wind_speed_10m: 10, wind_gusts_10m: 15, is_day: 1), daily: .init(time: [], temperature_2m_max: [], temperature_2m_min: [], sunset: []), minutely_15: .init(time: [start.timeIntervalSince1970, start.timeIntervalSince1970 + 900, start.timeIntervalSince1970 + 1800], precipitation: [0, 0, 1]))
+        assert(weather.rainSummary(now: start) == "rain in ~15 min")
+        assert(weather.rainSummary(now: start.addingTimeInterval(300)) == "rain in ~10 min",
+               "Count down to the start of the wet interval, not its end")
         assert(weather.rainSummary(now: start.addingTimeInterval(86400)) == nil, "Do not display expired rain timing")
         assert(weather.symbol == "cloud.fog")
+        func rainForecast(_ amounts: [Double?], offsets: [Double]? = nil) -> StandbyWeather {
+            let offsets = offsets ?? amounts.indices.map { Double($0) * 900 }
+            return StandbyWeather(current: weather.current, daily: weather.daily,
+                minutely_15: .init(time: offsets.map { start.timeIntervalSince1970 + $0 }, precipitation: amounts))
+        }
+        assert(rainForecast([0, 1, 0]).rainSummary(now: start.addingTimeInterval(300)) == "rain easing in ~10 min")
+        assert(rainForecast([0, 1, 1]).rainSummary(now: start) == "rain continuing")
+        assert(rainForecast(Array(repeating: 0, count: 9)).rainSummary(now: start) == "no rain in the next 2 hr")
+        assert(rainForecast([1, 0, 0]).rainSummary(now: start) == "no rain in the next 30 min",
+               "Rain in an elapsed interval must not be described as ongoing")
+        assert(rainForecast([0, nil, 1]).rainSummary(now: start) == nil, "Missing current coverage is not dry weather")
+        assert(rainForecast([0, 1], offsets: [900, 2700]).rainSummary(now: start) == "no rain in the next 15 min",
+               "Do not predict across a gap in the forecast")
         let freeJSON = #"{"bikes":[{"bike_id":"regular","lat":37.7,"lon":-122.4,"is_reserved":0,"is_disabled":0,"type":"classic_bike"},{"bike_id":"electric","lat":37.7,"lon":-122.4,"is_reserved":0,"is_disabled":0,"type":"electric_bike"}]}"#
         let types = try decoder.decode(FreeBikes.self, from: Data(freeJSON.utf8))
         assert(!types.bikes[0].electric && types.bikes[1].electric, "Parked regular bikes must not appear as e-bikes")
