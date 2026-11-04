@@ -1,4 +1,5 @@
 import Foundation
+import CoreLocation
 
 @main struct StandbyForecastTests {
     static func main() throws {
@@ -17,6 +18,23 @@ import Foundation
         let freeJSON = #"{"bikes":[{"bike_id":"regular","lat":37.7,"lon":-122.4,"is_reserved":0,"is_disabled":0,"type":"classic_bike"},{"bike_id":"electric","lat":37.7,"lon":-122.4,"is_reserved":0,"is_disabled":0,"type":"electric_bike"}]}"#
         let types = try decoder.decode(FreeBikes.self, from: Data(freeJSON.utf8))
         assert(!types.bikes[0].electric && types.bikes[1].electric, "Parked regular bikes must not appear as e-bikes")
+        let southPark = CLLocationCoordinate2D(latitude: 37.7815, longitude: -122.3945)
+        func bike(_ id: String, lat: Double, total: Int, electric: Int, docks: Int?) -> StandbyBike {
+            StandbyBike(id: id, name: id, coordinate: .init(latitude: lat, longitude: -122.3945),
+                total: total, electric: electric, docks: docks, reported: start, rentalURL: nil)
+        }
+        let markers = [
+            bike("empty station", lat: 37.782, total: 0, electric: 0, docks: 20),
+            bike("regular station", lat: 37.783, total: 12, electric: 0, docks: 8),
+            bike("parked regular", lat: 37.781, total: 1, electric: 0, docks: nil),
+            bike("outside map", lat: 37.8, total: 5, electric: 5, docks: 5)
+        ]
+        let visible = StandbyBike.inViewport(markers, center: southPark, latitudeSpan: 0.01, longitudeSpan: 0.01, electricOnly: false)
+        assert(Set(visible.map(\.id)) == Set(["empty station", "regular station", "parked regular"]))
+        let electric = StandbyBike.inViewport(markers, center: southPark, latitudeSpan: 0.01, longitudeSpan: 0.01, electricOnly: true)
+        assert(Set(electric.map(\.id)) == Set(["empty station", "regular station"]), "Zero-e-bike stations stay visible; parked regular bikes do not")
+        let panned = StandbyBike.inViewport(markers, center: .init(latitude: 37.8, longitude: -122.3945), latitudeSpan: 0.005, longitudeSpan: 0.005, electricOnly: false)
+        assert(panned.map(\.id) == ["outside map"], "Panning must load the new area's pins")
         // Optional live payloads verify the provider schemas as well as our deterministic cases.
         if CommandLine.arguments.count > 1 {
             let directory = CommandLine.arguments[1]
@@ -28,6 +46,6 @@ import Foundation
             let free = try decoder.decode(BikeFeed<FreeBikes>.self, from: read("bay-free_bike_status.json"))
             assert(!status.data.stations.isEmpty && !information.data.stations.isEmpty && !free.data.bikes.isEmpty)
         }
-        print("PASS UTC tide selection, expired forecasts, rain timing, and provider response decoding")
+        print("PASS UTC tide selection, expired forecasts, rain timing, viewport panning, empty stations, and provider response decoding")
     }
 }

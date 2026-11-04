@@ -143,3 +143,18 @@ struct StandbyBike: Identifiable {
     }
 }
 
+
+extension StandbyBike {
+    /// Markers follow the visible map, not the user's six nearest available bikes.
+    /// Empty stations remain visible; a zero is useful information, not missing data.
+    static func inViewport(_ bikes: [StandbyBike], center: CLLocationCoordinate2D,
+                           latitudeSpan: Double, longitudeSpan: Double,
+                           electricOnly: Bool) -> [StandbyBike] {
+        Array(bikes.filter { bike in
+            guard bike.isStation || (electricOnly ? bike.electric : bike.total) > 0 else { return false }
+            let longitudeDistance = abs(bike.coordinate.longitude - center.longitude).truncatingRemainder(dividingBy: 360)
+            return abs(bike.coordinate.latitude - center.latitude) <= latitudeSpan / 2 &&
+                min(longitudeDistance, 360 - longitudeDistance) <= longitudeSpan / 2
+        }.sorted { $0.distance(from: center) < $1.distance(from: center) }.prefix(120))
+    }
+}

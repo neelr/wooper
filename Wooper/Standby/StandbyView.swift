@@ -19,9 +19,10 @@ struct StandbyView: View {
     @State private var priorBatteryMonitoring = false
     @State private var priorIdleTimer = false
     @State private var priorBrightness: CGFloat?
-    @State private var electricOnly = true
+    @State private var electricOnly = false
     @State private var selectedBikeID: String?
     @State private var camera: MapCameraPosition = .automatic
+    @State private var mapRegion: MKCoordinateRegion?
     @State private var centeredLocation: String?
     private let cream = Color(red: 0.965, green: 0.952, blue: 0.922)
     private let ink = Color(red: 0.25, green: 0.25, blue: 0.22)
@@ -34,7 +35,16 @@ struct StandbyView: View {
             (electricOnly ? $0.electric : $0.total) > 0 && $0.distance(from: data.coordinate) < 5000
         }.sorted { $0.distance(from: data.coordinate) < $1.distance(from: data.coordinate) }.prefix(6))
     }
-    private var selected: StandbyBike? { nearby.first { $0.id == selectedBikeID } ?? nearby.first }
+    private var mapBikes: [StandbyBike] {
+        let region = mapRegion ?? MKCoordinateRegion(center: data.coordinate, latitudinalMeters: 1600, longitudinalMeters: 1600)
+        return StandbyBike.inViewport(data.bikes, center: region.center,
+            latitudeSpan: region.span.latitudeDelta, longitudeSpan: region.span.longitudeDelta,
+            electricOnly: electricOnly)
+    }
+    private var selected: StandbyBike? {
+        mapBikes.first { $0.id == selectedBikeID } ??
+        mapBikes.first { (electricOnly ? $0.electric : $0.total) > 0 } ?? mapBikes.first
+    }
     private var night: Bool { let hour = Calendar.current.component(.hour, from: now); return hour >= 22 || hour < 6 }
 
     var body: some View {
@@ -97,7 +107,7 @@ struct StandbyView: View {
                 do { try await Task.sleep(for: .seconds(300)) } catch { return }
             }
         }
-        .onChange(of: electricOnly) { _, _ in selectedBikeID = nil; centeredLocation = nil; centerMapIfNeeded() }
+        .onChange(of: electricOnly) { _, _ in selectedBikeID = nil }
         .onReceive(timer) { date in
             guard scenePhase == .active else { return }
             now = date; updateBattery(); updateBrightness()
@@ -220,6 +230,11 @@ struct StandbyView: View {
             HStack {
                 Text(data.location == nil ? "bay wheels / sf" : "bay wheels / nearby").tracking(0.3)
                 Spacer(minLength: 2)
+                Button {
+                    selectedBikeID = nil; centeredLocation = nil; centerMapIfNeeded()
+                } label: {
+                    Image(systemName: "location").frame(width: 24, height: 24)
+                }.accessibilityLabel("Show bikes near me")
                 Button { electricOnly.toggle() } label: {
                     HStack(spacing: 3) {
                         if electricOnly { Image(systemName: "bolt.fill") }
@@ -234,7 +249,7 @@ struct StandbyView: View {
                             .overlay(Circle().stroke(.white, lineWidth: 2))
                     }
                 }
-                ForEach(nearby) { bike in
+                ForEach(mapBikes) { bike in
                     Annotation(bike.name, coordinate: bike.coordinate) {
                         Button {
                             selectedBikeID = bike.id
@@ -247,11 +262,14 @@ struct StandbyView: View {
                             .background(selected?.id == bike.id ? ink : cream, in: Capsule())
                             .foregroundStyle(selected?.id == bike.id ? cream : ink)
                             .overlay(Capsule().stroke(ink.opacity(0.25), lineWidth: 0.5))
-                            .opacity(now.timeIntervalSince(bike.reported) > 300 ? 0.5 : 1)
+                            .opacity(now.timeIntervalSince(bike.reported) > 300 ? 0.5 : (electricOnly ? bike.electric : bike.total) == 0 ? 0.65 : 1)
                         }
                         .accessibilityLabel("\(bike.name), \(electricOnly ? bike.electric : bike.total) bikes")
                     }.annotationTitles(.hidden)
                 }
+            }
+            .onMapCameraChange(frequency: .onEnd) { context in
+                mapRegion = context.region
             }
             .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll, showsTraffic: false))
             .frame(height: mapHeight).clipShape(RoundedRectangle(cornerRadius: 8))
@@ -261,20 +279,21 @@ struct StandbyView: View {
                 } label: {
                     VStack(alignment: .leading, spacing: 3) {
                         HStack {
-                            Text(data.location == nil ? bike.name.lowercased() : "~\(max(1, Int(ceil(bike.distance(from: data.coordinate) * 1.3 / 80)))) min walk · \(electricOnly ? bike.electric : bike.total) \(electricOnly ? "e-bikes" : "bikes")")
+                            Text(bikeSummary(bike))
                                 .lineLimit(1).minimumScaleFactor(0.7)
                             Spacer(minLength: 3)
                             Image(systemName: "arrow.up.right")
                         }
-                        Text(data.location == nil ? "open in lyft" : bike.name.lowercased()).lineLimit(1).foregroundStyle(muted)
+                        Text(bike.name.lowercased()).lineLimit(1).foregroundStyle(muted)
                     }.font(.system(size: 10, design: .monospaced))
                 }.buttonStyle(.plain).disabled(bike.rentalURL == nil)
                 HStack(spacing: 5) {
+                    Text("\(bike.electric) electric ·")
                     if let docks = bike.docks { Text("\(docks) docks ·") }
                     Text(bikeAge(bike))
                 }.font(.system(size: 9, design: .monospaced)).foregroundStyle(muted)
             } else {
-                Text(data.bikeError ? "bike availability unavailable" : data.bikesUpdated == nil ? "finding bikes…" : "no \(electricOnly ? "e-bikes" : "bikes") within 5 km")
+                Text(data.bikeError ? "bike availability unavailable" : data.bikesUpdated == nil ? "finding bikes…" : "no bikes or stations in this area")
                     .font(.system(size: 10, design: .monospaced)).foregroundStyle(muted)
             }
         }
@@ -313,6 +332,14 @@ struct StandbyView: View {
                     .foregroundStyle(muted)
             }
         }
+    }
+
+    private func bikeSummary(_ bike: StandbyBike) -> String {
+        let count = electricOnly ? bike.electric : bike.total
+        if count == 0 { return electricOnly && bike.total > 0 ? "no e-bikes · \(bike.total) regular bikes" : "no bikes available here" }
+        let noun = electricOnly ? (count == 1 ? "e-bike" : "e-bikes") : (count == 1 ? "bike" : "bikes")
+        let walk = data.location == nil ? "" : "~\(max(1, Int(ceil(bike.distance(from: data.coordinate) * 1.3 / 80)))) min walk · "
+        return "\(walk)\(count) \(noun)"
     }
 
     private func bikeAge(_ bike: StandbyBike) -> String {
