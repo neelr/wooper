@@ -136,12 +136,10 @@ struct StandbyView: View {
                         contextPanel
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }
-                nowPlayingPanel
             } else {
                 clockFace(compact: false)
                 Spacer(minLength: 8)
                 weatherPanel
-                nowPlayingPanel
                 Spacer(minLength: 8)
                 VStack(alignment: .leading, spacing: 16) {
                     Rectangle().fill(muted.opacity(0.2)).frame(height: 0.5)
@@ -172,13 +170,7 @@ struct StandbyView: View {
                 if let raw = playback.url, let url = URL(string: raw), url.scheme == "https" { openURL(url) }
             } label: {
                 HStack(spacing: 12) {
-                    AsyncImage(url: playback.albumArt.flatMap(URL.init(string:))) { image in
-                        image.resizable().scaledToFill()
-                    } placeholder: {
-                        Image(systemName: "music.note").frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .background(muted.opacity(0.08))
-                    }
-                    .frame(width: 52, height: 52).clipShape(RoundedRectangle(cornerRadius: 5))
+                    vinylArtwork(playback)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(playback.song ?? "")
                             .font(.system(size: 15, weight: .medium, design: .monospaced))
@@ -196,6 +188,35 @@ struct StandbyView: View {
         }
     }
 
+    private func vinylArtwork(_ playback: StandbyPlayback) -> some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion || scenePhase != .active)) { context in
+            let angle = reduceMotion ? 0 : context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 12) * 30
+            ZStack {
+                Circle().fill(Color(white: 0.10).gradient)
+                ForEach(0..<5) { groove in
+                    Circle().stroke(Color.white.opacity(0.10), lineWidth: 0.5)
+                        .frame(width: CGFloat(66 - groove * 5), height: CGFloat(66 - groove * 5))
+                }
+                AsyncImage(url: playback.albumArt.flatMap(URL.init(string:))) { image in
+                    image.resizable().scaledToFill()
+                } placeholder: {
+                    Color(red: 0.65, green: 0.60, blue: 0.49)
+                }
+                .frame(width: 36, height: 36).clipShape(Circle())
+                Circle().fill(cream).frame(width: 5, height: 5)
+                    .overlay(Circle().stroke(Color.black.opacity(0.4), lineWidth: 0.5))
+            }
+            .rotationEffect(.degrees(angle))
+            .overlay {
+                Circle().fill(AngularGradient(colors: [.clear, .white.opacity(0.09), .clear, .clear, .white.opacity(0.09), .clear], center: .center))
+            }
+            .frame(width: 72, height: 72)
+            .shadow(color: .black.opacity(0.12), radius: 2, y: 2)
+        }
+        .frame(width: 72, height: 72)
+        .accessibilityHidden(true)
+    }
+
     private func clockFace(compact: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(now, format: .dateTime.hour(.defaultDigits(amPM: .omitted)).minute())
@@ -205,6 +226,7 @@ struct StandbyView: View {
             Text(now.formatted(.dateTime.weekday(.wide).month(.wide).day()).lowercased())
                 .font(.system(size: compact ? 19 : 23, weight: .medium, design: .monospaced))
                 .lineLimit(2)
+            nowPlayingPanel.padding(.top, 14)
         }
     }
 
@@ -234,7 +256,7 @@ struct StandbyView: View {
     }
 
     private var contextPanel: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 7) {
             if let low = data.tides?.nextLow(after: now), let date = low.date {
                 let tomorrow = !Calendar.current.isDate(date, inSameDayAs: now)
                 HStack(alignment: .top, spacing: 10) {
@@ -242,7 +264,7 @@ struct StandbyView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("low tide \(tomorrow ? "tomorrow " : "")\(date.formatted(date: .omitted, time: .shortened).lowercased())")
                         Text("golden gate · \(String(format: "%.1f", Double(low.v) ?? 0)) ft\(data.tideError ? " · cached" : "")")
-                            .font(.system(size: 13, weight: .medium, design: .monospaced)).foregroundStyle(muted)
+                            .font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(muted)
                     }
                 }
             } else {
@@ -261,6 +283,7 @@ struct StandbyView: View {
                 Label("sunset \(tomorrow ? "tomorrow " : "")\(StandbyWeather.time(sunset))\(minutes < 120 ? " · \(minutes)m left" : "")", systemImage: "sunset").foregroundStyle(muted)
             }
         }
+        .font(.system(size: 13, weight: .medium, design: .monospaced))
     }
 
     private func companionPanel(height: CGFloat, wide: Bool) -> some View {
