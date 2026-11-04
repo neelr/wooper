@@ -35,4 +35,4 @@ The compact layout lowers the clock/date/music and groups weather, the nearest L
 
 Both layouts show a rain line only when rain is approaching or ongoing, using relative wording such as `rain in ~10 min` or `rain easing in ~20 min`. Dry, missing, or stale forecasts leave the line hidden. Open-Meteo's precipitation bins cover the 15 minutes ending at each timestamp, so countdowns use interval starts and are rounded to approximate five-minute increments. Forecast gaps/nulls are not treated as dry weather. The model forecast is approximate, not a minute-resolution radar nowcast.
 
-Both standby layouts place the user's transparent [hippo artwork](https://neelr.dev/hippo.png) at the top-left above the clock. The original image is bundled in `StandbyHippo.imageset`, so it does not depend on a network request. It is decorative and excluded from hit testing and VoiceOver.
+Both standby layouts place the user's transparent [hippo artwork](https://neelr.dev/hippo.png) to the right of the low-tide details. The original image is bundled in `StandbyHippo.imageset`, so it does not depend on a network request. It is decorative and excluded from hit testing and VoiceOver.

@@ -170,7 +170,6 @@ struct StandbyView: View {
     private func tentClockPanel(height: CGFloat) -> some View {
         let dense = height < 380 || data.playback?.isVisible(now: now, receivedAt: data.playbackReceivedAt) == true
         return VStack(alignment: .leading, spacing: 0) {
-            standbyHippo
             Spacer(minLength: 12)
             VStack(alignment: .leading, spacing: dense ? 16 : 26) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -262,6 +261,14 @@ struct StandbyView: View {
     }
 
     private var tentConditions: some View {
+        HStack(alignment: .top, spacing: 12) {
+            tentConditionDetails
+            Spacer(minLength: 0)
+            standbyHippo
+        }
+    }
+
+    private var tentConditionDetails: some View {
         VStack(alignment: .leading, spacing: 5) {
             if let low = data.tides?.nextLow(after: now), let date = low.date {
                 let tomorrow = !Calendar.current.isDate(date, inSameDayAs: now)
@@ -284,7 +291,6 @@ struct StandbyView: View {
 
     private func clockPanel(compact: Bool) -> some View {
         VStack(alignment: .leading, spacing: compact ? 12 : 14) {
-            standbyHippo
             if compact {
                 HStack(alignment: .center, spacing: 24) {
                     clockFace(compact: true).frame(maxWidth: .infinity, alignment: .leading)
@@ -420,6 +426,14 @@ struct StandbyView: View {
     }
 
     private var contextPanel: some View {
+        HStack(alignment: .top, spacing: 12) {
+            contextDetails
+            Spacer(minLength: 0)
+            standbyHippo
+        }
+    }
+
+    private var contextDetails: some View {
         VStack(alignment: .leading, spacing: 7) {
             if let low = data.tides?.nextLow(after: now), let date = low.date {
                 let tomorrow = !Calendar.current.isDate(date, inSameDayAs: now)
