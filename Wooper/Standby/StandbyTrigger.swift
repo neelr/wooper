@@ -90,19 +90,10 @@ struct StandbySensor: UIViewRepresentable {
         #if DEBUG
         private var lastDiagnostic = Date.distantPast
         #endif
-        private var notifications: [NSObjectProtocol] = []
         init(trigger: StandbyTrigger) {
             self.trigger = trigger
             super.init(frame: .zero)
             isUserInteractionEnabled = false
-            for (name, visible) in [(UIResponder.keyboardWillShowNotification, true), (UIResponder.keyboardWillHideNotification, false)] {
-                notifications.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                    Task { @MainActor in
-                        self?.trigger.keyboardVisible = visible
-                        self?.trigger.policy.interact()
-                    }
-                })
-            }
         }
         required init?(coder: NSCoder) { fatalError() }
         override func didMoveToWindow() {
@@ -111,6 +102,10 @@ struct StandbySensor: UIViewRepresentable {
             observer = nil
             timer?.invalidate()
             guard let window else { return }
+            // Observe this window's current keyboard geometry. A global show
+            // notification can outlive the keyboard when Duo changes displays.
+            window.keyboardLayoutGuide.followsUndockedKeyboard = true
+            window.keyboardLayoutGuide.usesBottomSafeArea = false
             let touch = TouchObserver { [weak self] touching in
                 self?.trigger.policy.touching = touching
                 self?.trigger.policy.interact()
@@ -130,11 +125,17 @@ struct StandbySensor: UIViewRepresentable {
             let canPresent = window.rootViewController?.presentedViewController == nil
             let insets = window.safeAreaInsets
             let contentInsets = EdgeInsets(top: insets.top, leading: insets.left, bottom: insets.bottom, trailing: insets.right)
+            let keyboardFrame = window.keyboardLayoutGuide.layoutFrame.intersection(window.bounds)
+            let keyboardVisible = !keyboardFrame.isNull && keyboardFrame.width > 1 && keyboardFrame.height > 1
             DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
+                guard let self, self.window === window else { return }
                 if trigger.stacked != stacked { trigger.stacked = stacked }
                 if trigger.canPresent != canPresent { trigger.canPresent = canPresent }
                 if trigger.contentInsets != contentInsets { trigger.contentInsets = contentInsets }
+                if trigger.keyboardVisible != keyboardVisible {
+                    trigger.keyboardVisible = keyboardVisible
+                    trigger.policy.interact()
+                }
                 trigger.screen = window.windowScene?.screen
                 #if DEBUG
                 if Date().timeIntervalSince(lastDiagnostic) > 2 {
@@ -148,6 +149,7 @@ struct StandbySensor: UIViewRepresentable {
                         "touching": trigger.policy.touching, "suppressed": trigger.policy.suppressed,
                         "idle": Date().timeIntervalSince(trigger.policy.lastInteraction),
                         "canPresent": canPresent, "keyboard": trigger.keyboardVisible,
+                        "keyboardFrame": NSCoder.string(for: keyboardFrame),
                         "active": window.windowScene?.activationState == .foregroundActive,
                         "horizontalSizeClass": window.traitCollection.horizontalSizeClass.rawValue,
                         "verticalSizeClass": window.traitCollection.verticalSizeClass.rawValue,
@@ -165,10 +167,8 @@ struct StandbySensor: UIViewRepresentable {
             observer?.view?.removeGestureRecognizer(observer!)
             observer = nil
             timer?.invalidate(); timer = nil
-            notifications.forEach(NotificationCenter.default.removeObserver)
-            notifications = []
         }
-        deinit { timer?.invalidate(); notifications.forEach(NotificationCenter.default.removeObserver) }
+        deinit { timer?.invalidate() }
     }
 
     final class TouchObserver: UIGestureRecognizer {
