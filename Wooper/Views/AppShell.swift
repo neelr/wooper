@@ -14,6 +14,8 @@ struct AppShell: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var ds = DSModel()
     @State private var standby = StandbyTrigger()
+    @State private var standbyData = StandbyData()
+    @State private var standbyStatusBarHidden = false
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var standbyClock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -37,8 +39,6 @@ struct AppShell: View {
         navigationTabs
             .allowsHitTesting(!standby.visible)
             .accessibilityHidden(standby.visible)
-            .opacity(standby.visible ? 0 : 1)
-            .blur(radius: standby.visible && !reduceMotion ? 3 : 0)
             .background {
                 if #available(iOS 27.1, *) {
                     ComicModePresenter(active: selectedTab == .comics && supportsDS) {
@@ -52,13 +52,29 @@ struct AppShell: View {
             }
         }
         .overlay {
-            if standby.visible {
-                StandbyView(stacked: standby.stacked, trigger: standby) { standby.policy.dismiss() }
+            ZStack {
+                if standby.visible {
+                    StandbyView(stacked: standby.stacked, trigger: standby, data: standbyData) {
+                        standby.policy.dismiss()
+                    }
+                    .ignoresSafeArea()
                     .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: reduceMotion ? 0.2 : (standby.visible ? 0.8 : 0.65)), value: standby.visible)
+        }
+        .statusBarHidden(standbyStatusBarHidden)
+        .task(id: standby.visible) {
+            if standby.visible {
+                // Hide system chrome only after the opaque standby canvas covers
+                // Papery. Its full-screen geometry is independent of safe areas.
+                do { try await Task.sleep(for: .milliseconds(reduceMotion ? 250 : 850)) }
+                catch { return }
+                standbyStatusBarHidden = true
+            } else {
+                standbyStatusBarHidden = false
             }
         }
-        .statusBarHidden(standby.visible)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.65), value: standby.visible)
         .onReceive(standbyClock) { date in
             guard scenePhase == .active else { return }
             standby.policy.tick(eligible: Self.isDuo && supportsDS && selectedTab == .papery &&

@@ -4,12 +4,11 @@ import MapKit
 struct StandbyView: View {
     let stacked: Bool
     let trigger: StandbyTrigger
+    let data: StandbyData
     let dismiss: () -> Void
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
-    @State private var data = StandbyData()
-    @State private var revealed = false
     @State private var deck = StandbyDeck()
     @State private var paperID: Int?
     @State private var nextPaper = Date().addingTimeInterval(30)
@@ -62,18 +61,16 @@ struct StandbyView: View {
                     .frame(width: panelWidth, height: panelHeight)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .opacity(revealed ? 1 : 0)
-            .offset(y: revealed || reduceMotion ? 0 : 8)
         }
         .background(cream.ignoresSafeArea())
         .foregroundStyle(ink)
         .font(.system(size: 16, weight: .medium, design: .monospaced))
         .preferredColorScheme(.light)
         .onAppear {
-            withAnimation(.easeOut(duration: reduceMotion ? 0.2 : 0.65)) { revealed = true }
             priorIdleTimer = UIApplication.shared.isIdleTimerDisabled
             priorBatteryMonitoring = UIDevice.current.isBatteryMonitoringEnabled
             UIDevice.current.isBatteryMonitoringEnabled = true
+            if paperID == nil && !data.papers.isEmpty { advancePaper() }
             updateBattery(); activate()
         }
         .onDisappear {
