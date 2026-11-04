@@ -116,14 +116,6 @@ struct StandbyView: View {
 
     private func clockPanel(compact: Bool) -> some View {
         VStack(alignment: .leading, spacing: compact ? 12 : 14) {
-            HStack {
-                Text("papery / standby").tracking(1)
-                Spacer()
-                if battery >= 0 {
-                    Label("\(Int((battery * 100).rounded()))%", systemImage: charging ? "battery.100percent.bolt" : "battery.\(battery > 0.7 ? 100 : battery > 0.4 ? 50 : battery > 0.15 ? 25 : 0)percent")
-                        .accessibilityLabel("Battery \(Int(battery * 100)) percent\(charging ? ", charging" : "")")
-                }
-            }.font(.system(size: 13, weight: .medium, design: .monospaced)).foregroundStyle(muted)
             if compact {
                 HStack(alignment: .center, spacing: 24) {
                     clockFace(compact: true).frame(maxWidth: .infinity, alignment: .leading)
@@ -149,6 +141,14 @@ struct StandbyView: View {
                 Text("·")
                 Link("noaa tides", destination: URL(string: "https://tidesandcurrents.noaa.gov/noaatidepredictions.html?id=9414290")!)
             }.font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(muted)
+            Group {
+                if battery >= 0 {
+                    Label("\(Int((battery * 100).rounded()))%", systemImage: charging ? "battery.100percent.bolt" : "battery.\(battery > 0.7 ? 100 : battery > 0.4 ? 50 : battery > 0.15 ? 25 : 0)percent")
+                        .accessibilityLabel("Battery \(Int(battery * 100)) percent\(charging ? ", charging" : "")")
+                }
+            }
+            .font(.system(size: 13, weight: .medium, design: .monospaced))
+            .foregroundStyle(muted)
         }
     }
 
