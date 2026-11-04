@@ -62,8 +62,10 @@ struct StandbyView: View {
         Image("StandbyHippo")
             .renderingMode(.original)
             .resizable()
-            .scaledToFit()
-            .frame(width: 40, height: 40)
+            .scaledToFill()
+            // Keep the artwork's transparent side margins out of the layout.
+            .frame(width: compactScreen ? 64 : 80, height: compactScreen ? 88 : 110)
+            .clipped()
             .accessibilityHidden(true)
             .allowsHitTesting(false)
     }
@@ -261,11 +263,11 @@ struct StandbyView: View {
     }
 
     private var tentConditions: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .center, spacing: 0) {
             tentConditionDetails
-            Spacer(minLength: 0)
             standbyHippo
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var tentConditionDetails: some View {
@@ -426,11 +428,11 @@ struct StandbyView: View {
     }
 
     private var contextPanel: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .center, spacing: 0) {
             contextDetails
-            Spacer(minLength: 0)
             standbyHippo
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var contextDetails: some View {
