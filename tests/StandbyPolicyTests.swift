@@ -3,6 +3,24 @@ import Foundation
 @main struct StandbyPolicyTests {
     static func main() {
         let start = Date(timeIntervalSince1970: 10000)
+        assert(StandbyLayout.resolve(isDuo: true, horizontalRegular: true, verticalRegular: true) == .expanded)
+        assert(StandbyLayout.resolve(isDuo: true, horizontalRegular: false, verticalRegular: false) == .tent)
+        assert(StandbyLayout.resolve(isDuo: true, horizontalRegular: false, verticalRegular: true) == nil,
+               "Portrait phone use must not trigger tent standby")
+        assert(StandbyLayout.resolve(isDuo: false, horizontalRegular: false, verticalRegular: false) == nil)
+        assert(StandbyLayout.tent.supportsFold(partiallyOpen: false, angleDegrees: 38, wasSupported: false),
+               "The outside display reports closed even when tented at 38 degrees")
+        assert(!StandbyLayout.tent.supportsFold(partiallyOpen: false, angleDegrees: 0, wasSupported: false))
+        assert(!StandbyLayout.tent.supportsFold(partiallyOpen: false, angleDegrees: nil, wasSupported: false))
+        assert(!StandbyLayout.tent.supportsFold(partiallyOpen: false, angleDegrees: .nan, wasSupported: false))
+        assert(!StandbyLayout.tent.supportsFold(partiallyOpen: false, angleDegrees: 180, wasSupported: false))
+        assert(StandbyLayout.tent.supportsFold(partiallyOpen: false, angleDegrees: 12, wasSupported: true))
+        assert(!StandbyLayout.tent.supportsFold(partiallyOpen: false, angleDegrees: 12, wasSupported: false),
+               "Hysteresis avoids flashing at the tent threshold")
+        assert(StandbyLayout.expanded.supportsFold(partiallyOpen: true, angleDegrees: 120, wasSupported: false))
+        var closedTent = StandbyPolicy()
+        closedTent.tick(eligible: true, now: start.addingTimeInterval(100))
+        assert(!closedTent.visible, "A closed phone in landscape must not trigger tent standby")
         var gate = StandbyPolicy()
         gate.hingeChanged(partial: true, now: start)
         var freshFold = gate

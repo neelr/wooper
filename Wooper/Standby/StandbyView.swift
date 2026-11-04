@@ -3,6 +3,7 @@ import MapKit
 
 struct StandbyView: View {
     let stacked: Bool
+    let compactScreen: Bool
     let trigger: StandbyTrigger
     let data: StandbyData
     let dismiss: () -> Void
@@ -18,6 +19,8 @@ struct StandbyView: View {
     @State private var priorBatteryMonitoring = false
     @State private var priorIdleTimer = false
     @State private var priorBrightness: CGFloat?
+    @State private var brightnessScreen: UIScreen?
+    @State private var tentPage = 0
     @State private var electricOnly = false
     @State private var selectedBikeID: String?
     @State private var camera: MapCameraPosition
@@ -27,8 +30,9 @@ struct StandbyView: View {
     private let ink = Color(red: 0.17, green: 0.18, blue: 0.16)
     private let muted = Color(red: 0.36, green: 0.37, blue: 0.33)
 
-    init(stacked: Bool, trigger: StandbyTrigger, data: StandbyData, dismiss: @escaping () -> Void) {
+    init(stacked: Bool, compactScreen: Bool = false, trigger: StandbyTrigger, data: StandbyData, dismiss: @escaping () -> Void) {
         self.stacked = stacked
+        self.compactScreen = compactScreen
         self.trigger = trigger
         self.data = data
         self.dismiss = dismiss
@@ -47,23 +51,30 @@ struct StandbyView: View {
             electricOnly: electricOnly)
     }
     private var night: Bool { let hour = Calendar.current.component(.hour, from: now); return hour >= 22 || hour < 6 }
+    private var batterySymbol: String {
+        charging ? "battery.100percent.bolt" : "battery.\(battery > 0.7 ? 100 : battery > 0.4 ? 50 : battery > 0.15 ? 25 : 0)percent"
+    }
 
     var body: some View {
         GeometryReader { geometry in
-            let padding: CGFloat = stacked ? 18 : 20
-            let panelHeight = stacked ? (geometry.size.height - 28) / 2 : geometry.size.height
-            let panelWidth = stacked ? geometry.size.width : (geometry.size.width - 28) / 2
-            let layout = stacked ? AnyLayout(VStackLayout(spacing: 28)) : AnyLayout(HStackLayout(spacing: 28))
-            layout {
-                clockPanel(compact: stacked)
-                    .padding(padding)
-                    .frame(width: panelWidth, height: panelHeight)
-                companionPanel(height: panelHeight - padding * 2, wide: stacked)
-                    .padding(.vertical, padding)
-                    .padding(.horizontal, stacked ? padding : 0)
-                    .frame(width: panelWidth, height: panelHeight)
+            if compactScreen {
+                tentLayout(size: geometry.size)
+            } else {
+                let padding: CGFloat = stacked ? 18 : 20
+                let panelHeight = stacked ? (geometry.size.height - 28) / 2 : geometry.size.height
+                let panelWidth = stacked ? geometry.size.width : (geometry.size.width - 28) / 2
+                let layout = stacked ? AnyLayout(VStackLayout(spacing: 28)) : AnyLayout(HStackLayout(spacing: 28))
+                layout {
+                    clockPanel(compact: stacked)
+                        .padding(padding)
+                        .frame(width: panelWidth, height: panelHeight)
+                    companionPanel(height: panelHeight - padding * 2, wide: stacked)
+                        .padding(.vertical, padding)
+                        .padding(.horizontal, stacked ? padding : 0)
+                        .frame(width: panelWidth, height: panelHeight)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(cream.ignoresSafeArea())
         .foregroundStyle(ink)
@@ -125,6 +136,116 @@ struct StandbyView: View {
         }
     }
 
+    private func tentLayout(size: CGSize) -> some View {
+        let insets = trigger.contentInsets
+        let top = max(14, insets.top)
+        let bottom = max(14, insets.bottom)
+        let leading = max(20, insets.leading)
+        let trailing = max(20, insets.trailing)
+        let height = max(1, size.height - top - bottom)
+        let width = max(1, size.width - leading - trailing - 24)
+        return HStack(spacing: 24) {
+            tentClockPanel(height: height)
+                .frame(width: width * 0.48, height: height, alignment: .topLeading)
+            VStack(spacing: 10) {
+                TabView(selection: $tentPage) {
+                    bookmarkPanel.tag(0)
+                    bikePanel(mapHeight: max(85, height - 140)).tag(1)
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                HStack(spacing: 16) {
+                    tentPageButton("bookmarks", page: 0)
+                    tentPageButton("bikes", page: 1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(width: width * 0.52, height: height)
+        }
+        .padding(.top, top).padding(.bottom, bottom)
+        .padding(.leading, leading).padding(.trailing, trailing)
+    }
+
+    private func tentPageButton(_ title: String, page: Int) -> some View {
+        Button {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) { tentPage = page }
+        } label: {
+            Text(title).underline(tentPage == page)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(tentPage == page ? ink : muted)
+                .padding(.vertical, 6).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(tentPage == page ? .isSelected : [])
+    }
+
+    private func tentClockPanel(height: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(now, format: .dateTime.hour(.defaultDigits(amPM: .omitted)).minute())
+                .font(.system(size: min(112, height * 0.33), weight: .medium, design: .monospaced))
+                .monospacedDigit().lineLimit(1).minimumScaleFactor(0.5)
+                .accessibilityLabel(now.formatted(date: .omitted, time: .shortened))
+            Text(now.formatted(.dateTime.weekday(.wide).month(.wide).day()).lowercased())
+                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                .lineLimit(1).minimumScaleFactor(0.8)
+            nowPlayingPanel(compact: true).padding(.top, 3)
+            Spacer(minLength: 0)
+            if let weather = data.weather {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: weather.symbol)
+                    Text("\(Int(weather.current.temperature_2m.rounded()))°")
+                        .font(.system(size: 26, weight: .medium, design: .monospaced))
+                    Text(weather.condition).foregroundStyle(muted)
+                }.font(.system(size: 13, weight: .medium, design: .monospaced))
+                if let rain = weather.rainSummary(now: now) {
+                    Text(rain).font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(muted).lineLimit(1).minimumScaleFactor(0.8)
+                }
+            } else {
+                Text(data.weatherError ? "weather unavailable" : "checking the sky…")
+                    .font(.system(size: 12, weight: .medium, design: .monospaced)).foregroundStyle(muted)
+            }
+            if data.location == nil {
+                Text("san francisco · approximate location")
+                    .font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundStyle(muted)
+            }
+            Spacer(minLength: 0)
+            tentConditions
+            HStack(spacing: 5) {
+                Link("open-meteo", destination: URL(string: "https://open-meteo.com/")!)
+                Text("·")
+                Link("noaa tides", destination: URL(string: "https://tidesandcurrents.noaa.gov/noaatidepredictions.html?id=9414290")!)
+                Spacer(minLength: 2)
+                if battery >= 0 {
+                    Label("\(Int((battery * 100).rounded()))%", systemImage: batterySymbol)
+                        .labelStyle(.titleAndIcon)
+                }
+            }
+            .font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundStyle(muted)
+            .padding(.top, 3)
+        }
+    }
+
+    private var tentConditions: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            if let low = data.tides?.nextLow(after: now), let date = low.date {
+                let tomorrow = !Calendar.current.isDate(date, inSameDayAs: now)
+                Label("low tide \(tomorrow ? "tomorrow " : "")\(date.formatted(date: .omitted, time: .shortened).lowercased())", systemImage: "water.waves")
+            }
+            HStack(spacing: 12) {
+                if let sunrise = data.weather?.daily.sunrise?.first(where: { $0 > now.timeIntervalSince1970 }) {
+                    Label(StandbyWeather.time(sunrise), systemImage: "sunrise")
+                        .accessibilityLabel("Next sunrise \(StandbyWeather.time(sunrise))")
+                }
+                if let sunset = data.weather?.daily.sunset.first(where: { $0 > now.timeIntervalSince1970 }) {
+                    Label(StandbyWeather.time(sunset), systemImage: "sunset")
+                        .accessibilityLabel("Next sunset \(StandbyWeather.time(sunset))")
+                }
+            }
+        }
+        .font(.system(size: 11, weight: .medium, design: .monospaced))
+        .foregroundStyle(muted).lineLimit(1).minimumScaleFactor(0.8)
+    }
+
     private func clockPanel(compact: Bool) -> some View {
         VStack(alignment: .leading, spacing: compact ? 12 : 14) {
             if compact {
@@ -154,7 +275,7 @@ struct StandbyView: View {
             }.font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(muted)
             Group {
                 if battery >= 0 {
-                    Label("\(Int((battery * 100).rounded()))%", systemImage: charging ? "battery.100percent.bolt" : "battery.\(battery > 0.7 ? 100 : battery > 0.4 ? 50 : battery > 0.15 ? 25 : 0)percent")
+                    Label("\(Int((battery * 100).rounded()))%", systemImage: batterySymbol)
                         .accessibilityLabel("Battery \(Int(battery * 100)) percent\(charging ? ", charging" : "")")
                 }
             }
@@ -165,7 +286,7 @@ struct StandbyView: View {
         }
     }
 
-    @ViewBuilder private var nowPlayingPanel: some View {
+    @ViewBuilder private func nowPlayingPanel(compact: Bool = false) -> some View {
         if let playback = data.playback,
            playback.isVisible(now: now, receivedAt: data.playbackReceivedAt) {
             Button {
@@ -173,15 +294,19 @@ struct StandbyView: View {
             } label: {
                 HStack(spacing: 12) {
                     vinylArtwork(playback)
+                        .scaleEffect(compact ? 44.0 / 72 : 1)
+                        .frame(width: compact ? 44 : 72, height: compact ? 44 : 72)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(playback.song ?? "")
-                            .font(.system(size: 15, weight: .medium, design: .monospaced))
+                            .font(.system(size: compact ? 12 : 15, weight: .medium, design: .monospaced))
                             .foregroundStyle(ink).lineLimit(1)
                         if let artist = playback.artist {
-                            Text(artist).font(.system(size: 12, weight: .medium, design: .monospaced)).lineLimit(1)
+                            Text(artist).font(.system(size: compact ? 10 : 12, weight: .medium, design: .monospaced)).lineLimit(1)
                         }
+                        if !compact {
                         Text("spotify · \(playback.device?.name ?? "playing")")
                             .font(.system(size: 10, weight: .medium, design: .monospaced)).lineLimit(1)
+                        }
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .foregroundStyle(muted).contentShape(Rectangle())
@@ -228,7 +353,7 @@ struct StandbyView: View {
             Text(now.formatted(.dateTime.weekday(.wide).month(.wide).day()).lowercased())
                 .font(.system(size: compact ? 19 : 23, weight: .medium, design: .monospaced))
                 .lineLimit(2)
-            nowPlayingPanel.padding(.top, 14)
+            nowPlayingPanel().padding(.top, 14)
         }
     }
 
@@ -380,7 +505,7 @@ struct StandbyView: View {
     }
 
     private var bookmarkPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: compactScreen ? 8 : 12) {
             if let paper {
                 Button {
                     if let url = URL(string: paper.url) { dismiss(); openURL(url) }
@@ -401,7 +526,7 @@ struct StandbyView: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 5) {
                             Text(paper.displayTitle)
-                                .font(.system(size: 18, weight: .medium, design: .monospaced))
+                                .font(.system(size: compactScreen ? 14 : 18, weight: .medium, design: .monospaced))
                                 .foregroundStyle(ink).lineLimit(2)
                                 .multilineTextAlignment(.leading)
                             Text((URL(string: paper.url)?.host ?? paper.site ?? "saved link").replacingOccurrences(of: "www.", with: ""))
@@ -415,7 +540,7 @@ struct StandbyView: View {
                 }
                 .font(.system(size: 13, weight: .medium, design: .monospaced))
                 .foregroundStyle(muted)
-                .padding(.horizontal, stacked ? 0 : 20)
+                .padding(.horizontal, stacked || compactScreen ? 0 : 20)
                 GeometryReader { geometry in
                     Rectangle().fill(muted.opacity(0.2)).frame(width: geometry.size.width * max(0, min(1, 1 - nextPaper.timeIntervalSince(now) / 30)), height: 1)
                 }.frame(height: 1).accessibilityHidden(true)
@@ -465,13 +590,16 @@ struct StandbyView: View {
         data.startLocation(); updateBrightness()
     }
     private func updateBrightness() {
+        guard let screen = trigger.screen else { return }
+        if brightnessScreen !== screen { restoreBrightness() }
         if night {
-            if priorBrightness == nil { priorBrightness = UIScreen.main.brightness }
-            UIScreen.main.brightness = min(priorBrightness ?? 0.15, 0.15)
+            if priorBrightness == nil { priorBrightness = screen.brightness; brightnessScreen = screen }
+            screen.brightness = min(priorBrightness ?? 0.15, 0.15)
         } else { restoreBrightness() }
     }
     private func restoreBrightness() {
-        if let priorBrightness { UIScreen.main.brightness = priorBrightness }
+        if let priorBrightness { brightnessScreen?.brightness = priorBrightness }
         priorBrightness = nil
+        brightnessScreen = nil
     }
 }

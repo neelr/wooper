@@ -12,6 +12,7 @@ struct AppShell: View {
     private var recorder = AudioRecorderService.shared
 
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var ds = DSModel()
     @State private var standby = StandbyTrigger()
     @State private var standbyData = StandbyData()
@@ -20,6 +21,10 @@ struct AppShell: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var standbyClock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     private var supportsDS: Bool { Self.isDuo && sizeClass == .regular }
+    private var standbyLayout: StandbyLayout? {
+        StandbyLayout.resolve(isDuo: Self.isDuo, horizontalRegular: sizeClass == .regular,
+                              verticalRegular: verticalSizeClass == .regular)
+    }
 
     enum Tab { case papery, record, home, ds, comics }
     @State private var selectedTab: Tab = .papery
@@ -54,7 +59,7 @@ struct AppShell: View {
         .overlay {
             ZStack {
                 if standby.visible {
-                    StandbyView(stacked: standby.stacked, trigger: standby, data: standbyData) {
+                    StandbyView(stacked: standby.stacked, compactScreen: standbyLayout == .tent, trigger: standby, data: standbyData) {
                         standby.policy.dismiss()
                     }
                     .ignoresSafeArea()
@@ -78,7 +83,7 @@ struct AppShell: View {
         }
         .onReceive(standbyClock) { date in
             guard scenePhase == .active else { return }
-            let eligible = Self.isDuo && supportsDS && selectedTab == .papery &&
+            let eligible = standbyLayout != nil && selectedTab == .papery &&
                 !standby.keyboardVisible && standby.canPresent
             #if DEBUG
             standby.eligible = eligible
@@ -86,6 +91,10 @@ struct AppShell: View {
             standby.policy.tick(eligible: eligible, now: date)
         }
         .onChange(of: selectedTab) { _, _ in standby.policy.leave() }
+        .onChange(of: standbyLayout, initial: true) { _, layout in
+            standby.updateLayout(layout)
+            if layout == nil { standby.policy.leave() }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { standby.policy.leave() }
             if phase == .active { standby.policy.interact() }

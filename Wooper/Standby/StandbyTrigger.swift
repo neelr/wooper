@@ -7,6 +7,11 @@ final class StandbyTrigger {
     var stacked = false
     var canPresent = true
     var keyboardVisible = false
+    var contentInsets = EdgeInsets()
+    @ObservationIgnored weak var screen: UIScreen?
+    @ObservationIgnored private var layout: StandbyLayout?
+    @ObservationIgnored private var hingePartiallyOpen = false
+    @ObservationIgnored private var hingeDegrees: Double?
     var visible: Bool { policy.visible }
 
     #if DEBUG
@@ -35,7 +40,19 @@ final class StandbyTrigger {
         hingeAngle = hinge?.angle.degrees
         hingeUpdates += 1
         #endif
-        let partial = hinge?.status == .partiallyOpen
+        hingePartiallyOpen = hinge?.status == .partiallyOpen
+        hingeDegrees = hinge?.angle.degrees
+        updateFold()
+    }
+
+    func updateLayout(_ layout: StandbyLayout?) {
+        self.layout = layout
+        updateFold()
+    }
+
+    private func updateFold() {
+        let partial = layout?.supportsFold(partiallyOpen: hingePartiallyOpen, angleDegrees: hingeDegrees,
+                                           wasSupported: policy.partiallyOpen) ?? false
         if policy.partiallyOpen != partial { policy.hingeChanged(partial: partial) }
     }
 }
@@ -111,10 +128,14 @@ struct StandbySensor: UIViewRepresentable {
             let stacked = abs(axis.x - origin.x) > abs(axis.y - origin.y)
             // A system sheet, filter menu, or permissions prompt must not be covered.
             let canPresent = window.rootViewController?.presentedViewController == nil
+            let insets = window.safeAreaInsets
+            let contentInsets = EdgeInsets(top: insets.top, leading: insets.left, bottom: insets.bottom, trailing: insets.right)
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 if trigger.stacked != stacked { trigger.stacked = stacked }
                 if trigger.canPresent != canPresent { trigger.canPresent = canPresent }
+                if trigger.contentInsets != contentInsets { trigger.contentInsets = contentInsets }
+                trigger.screen = window.windowScene?.screen
                 #if DEBUG
                 if Date().timeIntervalSince(lastDiagnostic) > 2 {
                     lastDiagnostic = Date()
@@ -127,7 +148,10 @@ struct StandbySensor: UIViewRepresentable {
                         "touching": trigger.policy.touching, "suppressed": trigger.policy.suppressed,
                         "idle": Date().timeIntervalSince(trigger.policy.lastInteraction),
                         "canPresent": canPresent, "keyboard": trigger.keyboardVisible,
-                        "active": window.windowScene?.activationState == .foregroundActive
+                        "active": window.windowScene?.activationState == .foregroundActive,
+                        "horizontalSizeClass": window.traitCollection.horizontalSizeClass.rawValue,
+                        "verticalSizeClass": window.traitCollection.verticalSizeClass.rawValue,
+                        "windowWidth": window.bounds.width, "windowHeight": window.bounds.height
                     ]
                     if let data = try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys]),
                        let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
