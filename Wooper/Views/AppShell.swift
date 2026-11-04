@@ -63,6 +63,7 @@ struct AppShell: View {
             }
             .animation(.easeInOut(duration: reduceMotion ? 0.2 : (standby.visible ? 0.8 : 0.65)), value: standby.visible)
         }
+        .modifier(StandbyHingeObserver(trigger: standby, enabled: Self.isDuo))
         .statusBarHidden(standbyStatusBarHidden)
         .task(id: standby.visible) {
             if standby.visible {
@@ -77,8 +78,12 @@ struct AppShell: View {
         }
         .onReceive(standbyClock) { date in
             guard scenePhase == .active else { return }
-            standby.policy.tick(eligible: Self.isDuo && supportsDS && selectedTab == .papery &&
-                !standby.keyboardVisible && standby.canPresent, now: date)
+            let eligible = Self.isDuo && supportsDS && selectedTab == .papery &&
+                !standby.keyboardVisible && standby.canPresent
+            #if DEBUG
+            standby.eligible = eligible
+            #endif
+            standby.policy.tick(eligible: eligible, now: date)
         }
         .onChange(of: selectedTab) { _, _ in standby.policy.leave() }
         .onChange(of: scenePhase) { _, phase in

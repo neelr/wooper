@@ -8,9 +8,56 @@ final class StandbyTrigger {
     var canPresent = true
     var keyboardVisible = false
     var visible: Bool { policy.visible }
+
+    #if DEBUG
+    @ObservationIgnored var hingeStatus = "no update"
+    @ObservationIgnored var hingeAngle: Double?
+    @ObservationIgnored var hingeUpdates = 0
+    @ObservationIgnored var hingeTransitions: [[String: Any]] = []
+    @ObservationIgnored var eligible = false
+    #endif
+
+    @available(iOS 27.1, *)
+    func hingeChanged(_ hinge: DeviceHinge?) {
+        #if DEBUG
+        let status: String
+        switch hinge?.status {
+        case .closed: status = "closed"
+        case .partiallyOpen: status = "partially open"
+        case .fullyOpen: status = "fully open"
+        default: status = "unavailable"
+        }
+        if status != hingeStatus {
+            hingeTransitions.append(["status": status, "time": Date().timeIntervalSince1970])
+            hingeTransitions = Array(hingeTransitions.suffix(20))
+        }
+        hingeStatus = status
+        hingeAngle = hinge?.angle.degrees
+        hingeUpdates += 1
+        #endif
+        let partial = hinge?.status == .partiallyOpen
+        if policy.partiallyOpen != partial { policy.hingeChanged(partial: partial) }
+    }
 }
 
-/// Watches the real hinge and passively observes touches across the whole window,
+/// Attach to the persistent SwiftUI content, including the standby overlay, so
+/// folding remains observable while either screen is visible.
+struct StandbyHingeObserver: ViewModifier {
+    let trigger: StandbyTrigger
+    let enabled: Bool
+
+    func body(content: Content) -> some View {
+        if #available(iOS 27.1, *) {
+            content.onHingeChange(isEnabled: enabled) { _, context in
+                trigger.hingeChanged(context.hinge)
+            }
+        } else {
+            content
+        }
+    }
+}
+
+/// Samples layout and passively observes touches across the whole window,
 /// including list scrolling and system menus; it never competes with their gestures.
 @available(iOS 27.1, *)
 struct StandbySensor: UIViewRepresentable {
@@ -22,8 +69,10 @@ struct StandbySensor: UIViewRepresentable {
     final class SensorView: UIView {
         let trigger: StandbyTrigger
         private var observer: TouchObserver?
-        private var hinge: UIHingeInteraction?
         private var timer: Timer?
+        #if DEBUG
+        private var lastDiagnostic = Date.distantPast
+        #endif
         private var notifications: [NSObjectProtocol] = []
         init(trigger: StandbyTrigger) {
             self.trigger = trigger
@@ -41,22 +90,10 @@ struct StandbySensor: UIViewRepresentable {
         required init?(coder: NSCoder) { fatalError() }
         override func didMoveToWindow() {
             super.didMoveToWindow()
-            if let hinge { hinge.view?.removeInteraction(hinge) }
-            hinge = nil
             observer?.view?.removeGestureRecognizer(observer!)
             observer = nil
             timer?.invalidate()
             guard let window else { return }
-            let hinge = UIHingeInteraction { [weak self] interaction, update in
-                let partial = update.hinge?.status == .partiallyOpen
-                DispatchQueue.main.async {
-                    guard let self, interaction.view === self.window,
-                          self.trigger.policy.partiallyOpen != partial else { return }
-                    self.trigger.policy.hingeChanged(partial: partial)
-                }
-            }
-            self.hinge = hinge
-            window.addInteraction(hinge)
             let touch = TouchObserver { [weak self] touching in
                 self?.trigger.policy.touching = touching
                 self?.trigger.policy.interact()
@@ -68,12 +105,6 @@ struct StandbySensor: UIViewRepresentable {
         }
         func sample() {
             guard let window else { return }
-            // Re-enabling requests UIKit's current hinge state. This also catches
-            // folds whose live notification was lost during a hierarchy change.
-            if window.windowScene?.activationState == .foregroundActive, let hinge {
-                hinge.isEnabled = false
-                hinge.isEnabled = true
-            }
             let fixed = window.screen.fixedCoordinateSpace
             let origin = fixed.convert(CGPoint.zero, to: self)
             let axis = fixed.convert(CGPoint(x: 1, y: 0), to: self)
@@ -84,11 +115,29 @@ struct StandbySensor: UIViewRepresentable {
                 guard let self else { return }
                 if trigger.stacked != stacked { trigger.stacked = stacked }
                 if trigger.canPresent != canPresent { trigger.canPresent = canPresent }
+                #if DEBUG
+                if Date().timeIntervalSince(lastDiagnostic) > 2 {
+                    lastDiagnostic = Date()
+                    let fields: [String: Any] = [
+                        "time": Date().timeIntervalSince1970,
+                        "hinge": trigger.hingeStatus, "angleDegrees": trigger.hingeAngle as Any? ?? NSNull(),
+                        "hingeUpdates": trigger.hingeUpdates, "transitions": trigger.hingeTransitions,
+                        "partial": trigger.policy.partiallyOpen, "visible": trigger.visible,
+                        "eligible": trigger.eligible,
+                        "touching": trigger.policy.touching, "suppressed": trigger.policy.suppressed,
+                        "idle": Date().timeIntervalSince(trigger.policy.lastInteraction),
+                        "canPresent": canPresent, "keyboard": trigger.keyboardVisible,
+                        "active": window.windowScene?.activationState == .foregroundActive
+                    ]
+                    if let data = try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys]),
+                       let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+                        try? data.write(to: directory.appendingPathComponent("standby-debug.json"), options: .atomic)
+                    }
+                }
+                #endif
             }
         }
         func stop() {
-            if let hinge { hinge.view?.removeInteraction(hinge) }
-            hinge = nil
             observer?.view?.removeGestureRecognizer(observer!)
             observer = nil
             timer?.invalidate(); timer = nil
