@@ -265,6 +265,7 @@ struct StandbyView: View {
     private var tentConditions: some View {
         HStack(alignment: .center, spacing: 0) {
             tentConditionDetails
+            Spacer(minLength: 12)
             standbyHippo
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -430,6 +431,7 @@ struct StandbyView: View {
     private var contextPanel: some View {
         HStack(alignment: .center, spacing: 0) {
             contextDetails
+            Spacer(minLength: 12)
             standbyHippo
         }
         .frame(maxWidth: .infinity, alignment: .leading)
