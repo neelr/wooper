@@ -22,17 +22,13 @@ struct StandbySensor: UIViewRepresentable {
     final class SensorView: UIView {
         let trigger: StandbyTrigger
         private var observer: TouchObserver?
+        private var hinge: UIHingeInteraction?
         private var timer: Timer?
         private var notifications: [NSObjectProtocol] = []
         init(trigger: StandbyTrigger) {
             self.trigger = trigger
             super.init(frame: .zero)
             isUserInteractionEnabled = false
-            addInteraction(UIHingeInteraction { [weak self] _, update in
-                DispatchQueue.main.async {
-                    self?.trigger.policy.hingeChanged(partial: update.hinge?.status == .partiallyOpen)
-                }
-            })
             for (name, visible) in [(UIResponder.keyboardWillShowNotification, true), (UIResponder.keyboardWillHideNotification, false)] {
                 notifications.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                     Task { @MainActor in
@@ -45,10 +41,22 @@ struct StandbySensor: UIViewRepresentable {
         required init?(coder: NSCoder) { fatalError() }
         override func didMoveToWindow() {
             super.didMoveToWindow()
+            if let hinge { hinge.view?.removeInteraction(hinge) }
+            hinge = nil
             observer?.view?.removeGestureRecognizer(observer!)
             observer = nil
             timer?.invalidate()
             guard let window else { return }
+            let hinge = UIHingeInteraction { [weak self] interaction, update in
+                let partial = update.hinge?.status == .partiallyOpen
+                DispatchQueue.main.async {
+                    guard let self, interaction.view === self.window,
+                          self.trigger.policy.partiallyOpen != partial else { return }
+                    self.trigger.policy.hingeChanged(partial: partial)
+                }
+            }
+            self.hinge = hinge
+            window.addInteraction(hinge)
             let touch = TouchObserver { [weak self] touching in
                 self?.trigger.policy.touching = touching
                 self?.trigger.policy.interact()
@@ -60,6 +68,12 @@ struct StandbySensor: UIViewRepresentable {
         }
         func sample() {
             guard let window else { return }
+            // Re-enabling requests UIKit's current hinge state. This also catches
+            // folds whose live notification was lost during a hierarchy change.
+            if window.windowScene?.activationState == .foregroundActive, let hinge {
+                hinge.isEnabled = false
+                hinge.isEnabled = true
+            }
             let fixed = window.screen.fixedCoordinateSpace
             let origin = fixed.convert(CGPoint.zero, to: self)
             let axis = fixed.convert(CGPoint(x: 1, y: 0), to: self)
@@ -73,6 +87,8 @@ struct StandbySensor: UIViewRepresentable {
             }
         }
         func stop() {
+            if let hinge { hinge.view?.removeInteraction(hinge) }
+            hinge = nil
             observer?.view?.removeGestureRecognizer(observer!)
             observer = nil
             timer?.invalidate(); timer = nil

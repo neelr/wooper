@@ -6,6 +6,7 @@ import Foundation
         var gate = StandbyPolicy()
         gate.hingeChanged(partial: true, now: start)
         var freshFold = gate
+        freshFold.hingeChanged(partial: true, now: start.addingTimeInterval(2))
         freshFold.tick(eligible: true, now: start.addingTimeInterval(3))
         assert(freshFold.visible, "A fresh fold enters standby after three idle seconds")
         gate.tick(eligible: true, now: start.addingTimeInterval(2))

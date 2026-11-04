@@ -157,6 +157,8 @@ struct StandbyView: View {
             }
             .font(.system(size: 13, weight: .medium, design: .monospaced))
             .foregroundStyle(muted)
+            .padding(.leading, 16)
+            .padding(.bottom, 8)
         }
     }
 
