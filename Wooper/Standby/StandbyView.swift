@@ -58,6 +58,16 @@ struct StandbyView: View {
         return data.weather?.rainSummary(now: now)
     }
 
+    private var standbyHippo: some View {
+        Image("StandbyHippo")
+            .renderingMode(.original)
+            .resizable()
+            .scaledToFit()
+            .frame(width: 40, height: 40)
+            .accessibilityHidden(true)
+            .allowsHitTesting(false)
+    }
+
     var body: some View {
         GeometryReader { geometry in
             if compactScreen {
@@ -160,6 +170,7 @@ struct StandbyView: View {
     private func tentClockPanel(height: CGFloat) -> some View {
         let dense = height < 380 || data.playback?.isVisible(now: now, receivedAt: data.playbackReceivedAt) == true
         return VStack(alignment: .leading, spacing: 0) {
+            standbyHippo
             Spacer(minLength: 12)
             VStack(alignment: .leading, spacing: dense ? 16 : 26) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -273,6 +284,7 @@ struct StandbyView: View {
 
     private func clockPanel(compact: Bool) -> some View {
         VStack(alignment: .leading, spacing: compact ? 12 : 14) {
+            standbyHippo
             if compact {
                 HStack(alignment: .center, spacing: 24) {
                     clockFace(compact: true).frame(maxWidth: .infinity, alignment: .leading)
