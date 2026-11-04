@@ -2,6 +2,7 @@ import Foundation
 
 /// Pure state machine so touches, folding, and scene transitions share one idle deadline.
 struct StandbyPolicy {
+    static let idleDelay: TimeInterval = 3
     private(set) var visible = false
     private(set) var partiallyOpen = false
     private(set) var suppressed = false
@@ -25,7 +26,7 @@ struct StandbyPolicy {
     mutating func dismiss() { visible = false; suppressed = true }
     mutating func tick(eligible: Bool, now: Date = Date()) {
         guard eligible else { leave(now: now); return }
-        if partiallyOpen && !suppressed && !touching && now.timeIntervalSince(lastInteraction) >= 15 {
+        if partiallyOpen && !suppressed && !touching && now.timeIntervalSince(lastInteraction) >= Self.idleDelay {
             visible = true
         }
     }

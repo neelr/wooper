@@ -15,6 +15,7 @@ struct StandbyWeather: Decodable {
         let temperature_2m_max: [Double]
         let temperature_2m_min: [Double]
         let sunset: [Double]
+        var sunrise: [Double]? = nil
     }
     struct QuarterHours: Decodable {
         let time: [Double]

@@ -49,7 +49,7 @@ struct StandbyView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let padding: CGFloat = stacked ? 24 : 30
+            let padding: CGFloat = stacked ? 18 : 20
             let panelHeight = stacked ? (geometry.size.height - 28) / 2 : geometry.size.height
             let panelWidth = stacked ? geometry.size.width : (geometry.size.width - 28) / 2
             let layout = stacked ? AnyLayout(VStackLayout(spacing: 28)) : AnyLayout(HStackLayout(spacing: 28))
@@ -65,16 +65,8 @@ struct StandbyView: View {
         }
         .background(cream.ignoresSafeArea())
         .foregroundStyle(ink)
-        .font(.system(size: 12, design: .monospaced))
+        .font(.system(size: 16, design: .monospaced))
         .preferredColorScheme(.light)
-        .overlay(alignment: .bottomLeading) {
-            Button(action: dismiss) {
-                Image(systemName: "chevron.left").font(.system(size: 15, weight: .medium))
-                    .frame(width: 44, height: 44).contentShape(Rectangle())
-            }
-            .foregroundStyle(muted).padding(.leading, 8)
-            .accessibilityLabel("Back to Papery")
-        }
         .onAppear {
             priorIdleTimer = UIApplication.shared.isIdleTimerDisabled
             priorBatteryMonitoring = UIDevice.current.isBatteryMonitoringEnabled
@@ -118,7 +110,7 @@ struct StandbyView: View {
     }
 
     private func clockPanel(compact: Bool) -> some View {
-        VStack(alignment: .leading, spacing: compact ? 12 : 24) {
+        VStack(alignment: .leading, spacing: compact ? 12 : 14) {
             HStack {
                 Text("papery / standby").tracking(1)
                 Spacer()
@@ -126,8 +118,7 @@ struct StandbyView: View {
                     Label("\(Int((battery * 100).rounded()))%", systemImage: charging ? "battery.100percent.bolt" : "battery.\(battery > 0.7 ? 100 : battery > 0.4 ? 50 : battery > 0.15 ? 25 : 0)percent")
                         .accessibilityLabel("Battery \(Int(battery * 100)) percent\(charging ? ", charging" : "")")
                 }
-            }.font(.system(size: 10, design: .monospaced)).foregroundStyle(muted)
-            Spacer(minLength: 0)
+            }.font(.system(size: 13, design: .monospaced)).foregroundStyle(muted)
             if compact {
                 HStack(alignment: .center, spacing: 24) {
                     clockFace(compact: true).frame(maxWidth: .infinity, alignment: .leading)
@@ -148,20 +139,19 @@ struct StandbyView: View {
                 Link("open-meteo", destination: URL(string: "https://open-meteo.com/")!)
                 Text("·")
                 Link("noaa tides", destination: URL(string: "https://tidesandcurrents.noaa.gov/noaatidepredictions.html?id=9414290")!)
-            }.font(.system(size: 9, design: .monospaced)).foregroundStyle(muted)
+            }.font(.system(size: 11, design: .monospaced)).foregroundStyle(muted)
         }
     }
 
     private func clockFace(compact: Bool) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(now, format: .dateTime.hour(.defaultDigits(amPM: .omitted)).minute())
-                .font(.system(size: compact ? 80 : 100, weight: .light, design: .monospaced))
+                .font(.system(size: compact ? 112 : 154, weight: .light, design: .monospaced))
                 .monospacedDigit().lineLimit(1).minimumScaleFactor(0.45)
                 .accessibilityLabel(now.formatted(date: .omitted, time: .shortened))
-            Text(now.formatted(.dateTime.weekday(.wide)).lowercased())
-                .font(.system(size: 15, design: .monospaced))
-            Text(now.formatted(.dateTime.month(.wide).day()).lowercased())
-                .font(.system(size: 15, design: .monospaced)).foregroundStyle(muted)
+            Text(now.formatted(.dateTime.weekday(.wide).month(.wide).day()).lowercased())
+                .font(.system(size: compact ? 19 : 23, design: .monospaced))
+                .lineLimit(2)
         }
     }
 
@@ -171,7 +161,7 @@ struct StandbyView: View {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Image(systemName: weather.symbol)
                     Text("\(Int(weather.current.temperature_2m.rounded()))°")
-                        .font(.system(size: 29, weight: .light, design: .monospaced))
+                        .font(.system(size: 44, weight: .light, design: .monospaced))
                     Text(weather.condition).foregroundStyle(muted)
                 }
                 Text("feels \(Int(weather.current.apparent_temperature.rounded()))°  ↑\(Int(weather.daily.temperature_2m_max.first ?? 0))° ↓\(Int(weather.daily.temperature_2m_min.first ?? 0))°")
@@ -186,7 +176,7 @@ struct StandbyView: View {
             } else {
                 Label(data.weatherError ? "weather unavailable" : "checking the sky…", systemImage: "cloud").foregroundStyle(muted)
             }
-            if data.location == nil { Text("san francisco · approximate location").font(.system(size: 9, design: .monospaced)).foregroundStyle(muted) }
+            if data.location == nil { Text("san francisco · approximate location").font(.system(size: 11, design: .monospaced)).foregroundStyle(muted) }
         }
     }
 
@@ -199,11 +189,17 @@ struct StandbyView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("low tide \(tomorrow ? "tomorrow " : "")\(date.formatted(date: .omitted, time: .shortened).lowercased())")
                         Text("golden gate · \(String(format: "%.1f", Double(low.v) ?? 0)) ft\(data.tideError ? " · cached" : "")")
-                            .font(.system(size: 10, design: .monospaced)).foregroundStyle(muted)
+                            .font(.system(size: 13, design: .monospaced)).foregroundStyle(muted)
                     }
                 }
             } else {
                 Label(data.tideError ? "tides unavailable" : "checking the tide…", systemImage: "water.waves").foregroundStyle(muted)
+            }
+            if let sunrise = data.weather?.daily.sunrise?.first(where: { $0 > now.timeIntervalSince1970 }) {
+                let date = Date(timeIntervalSince1970: sunrise)
+                let tomorrow = !Calendar.current.isDate(date, inSameDayAs: now)
+                Label("sunrise \(tomorrow ? "tomorrow " : "")\(StandbyWeather.time(sunrise))", systemImage: "sunrise")
+                    .foregroundStyle(muted)
             }
             if let sunset = data.weather?.daily.sunset.first(where: { $0 > now.timeIntervalSince1970 }) {
                 let date = Date(timeIntervalSince1970: sunset)
@@ -217,7 +213,7 @@ struct StandbyView: View {
     private func companionPanel(height: CGFloat, wide: Bool) -> some View {
         let layout = wide ? AnyLayout(HStackLayout(alignment: .top, spacing: 24)) : AnyLayout(VStackLayout(spacing: 22))
         return layout {
-            bikePanel(mapHeight: max(95, wide ? height - 98 : height * 0.39))
+            bikePanel(mapHeight: max(95, wide ? height - 125 : height * 0.40))
                 .frame(maxWidth: .infinity, maxHeight: wide ? .infinity : nil, alignment: .top)
             if !wide { Rectangle().fill(muted.opacity(0.2)).frame(height: 0.5) }
             bookmarkPanel
@@ -241,7 +237,7 @@ struct StandbyView: View {
                         Text(electricOnly ? "e-bikes" : "all bikes").underline()
                     }
                 }.accessibilityLabel(electricOnly ? "Showing e-bikes. Show all bikes" : "Showing all bikes. Show e-bikes")
-            }.font(.system(size: 10, design: .monospaced)).foregroundStyle(muted)
+            }.font(.system(size: 13, design: .monospaced)).foregroundStyle(muted)
             Map(position: $camera, interactionModes: [.pan, .zoom]) {
                 if let location = data.location {
                     Annotation("you", coordinate: location.coordinate) {
@@ -284,17 +280,17 @@ struct StandbyView: View {
                             Spacer(minLength: 3)
                             Image(systemName: "arrow.up.right")
                         }
-                        Text(bike.name.lowercased()).lineLimit(1).foregroundStyle(muted)
-                    }.font(.system(size: 10, design: .monospaced))
+                        Text(bike.name.lowercased()).lineLimit(1).minimumScaleFactor(0.8).foregroundStyle(muted)
+                    }.font(.system(size: 13, design: .monospaced))
                 }.buttonStyle(.plain).disabled(bike.rentalURL == nil)
                 HStack(spacing: 5) {
                     Text("\(bike.electric) electric ·")
                     if let docks = bike.docks { Text("\(docks) docks ·") }
                     Text(bikeAge(bike))
-                }.font(.system(size: 9, design: .monospaced)).foregroundStyle(muted)
+                }.font(.system(size: 11, design: .monospaced)).foregroundStyle(muted)
             } else {
                 Text(data.bikeError ? "bike availability unavailable" : data.bikesUpdated == nil ? "finding bikes…" : "no bikes or stations in this area")
-                    .font(.system(size: 10, design: .monospaced)).foregroundStyle(muted)
+                    .font(.system(size: 13, design: .monospaced)).foregroundStyle(muted)
             }
         }
     }
@@ -306,7 +302,7 @@ struct StandbyView: View {
                 Spacer()
                 Button { advancePaper() } label: { Image(systemName: "arrow.right").frame(width: 28, height: 28) }
                     .accessibilityLabel("Next bookmark")
-            }.font(.system(size: 10, design: .monospaced)).foregroundStyle(muted)
+            }.font(.system(size: 13, design: .monospaced)).foregroundStyle(muted)
             if let paper {
                 Button {
                     if let url = URL(string: paper.url) { dismiss(); openURL(url) }
@@ -318,10 +314,10 @@ struct StandbyView: View {
                                     .saturation(0.4).opacity(0.85)
                             }.frame(height: 95)
                         }
-                        Text(paper.displayTitle).font(.system(size: stacked ? 14 : 17, weight: .regular, design: .monospaced))
+                        Text(paper.displayTitle).font(.system(size: stacked ? 21 : 25, weight: .regular, design: .monospaced))
                             .lineLimit(stacked ? 4 : 5).multilineTextAlignment(.leading)
                         Text((URL(string: paper.url)?.host ?? paper.site ?? "saved link").replacingOccurrences(of: "www.", with: ""))
-                            .font(.system(size: 10, design: .monospaced)).foregroundStyle(muted).lineLimit(1)
+                            .font(.system(size: 13, design: .monospaced)).foregroundStyle(muted).lineLimit(1)
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }.buttonStyle(.plain).id(paper.id).transition(.opacity)
                 GeometryReader { geometry in

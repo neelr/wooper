@@ -106,6 +106,13 @@ struct StandbySensor: UIViewRepresentable {
             touchesDown.subtract(touches); changed(!touchesDown.isEmpty)
             if touchesDown.isEmpty { state = .failed }
         }
-        override func reset() { touchesDown = []; changed(false); super.reset() }
+        override func reset() {
+            // UIKit can reset a passive recognizer without any user interaction.
+            // Only unfinished touches should affect the standby idle deadline.
+            let wasTouching = !touchesDown.isEmpty
+            touchesDown = []
+            if wasTouching { changed(false) }
+            super.reset()
+        }
     }
 }

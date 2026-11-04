@@ -78,7 +78,7 @@ final class StandbyData: NSObject, @preconcurrency CLLocationManagerDelegate {
     }
     private func refreshWeather(_ coordinate: CLLocationCoordinate2D) async {
         do {
-            let url = "https://api.open-meteo.com/v1/forecast?latitude=\(coordinate.latitude)&longitude=\(coordinate.longitude)&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_gusts_10m,is_day&daily=temperature_2m_max,temperature_2m_min,sunset&minutely_15=precipitation&forecast_minutely_15=24&temperature_unit=fahrenheit&wind_speed_unit=mph&timeformat=unixtime&timezone=auto&forecast_days=2"
+            let url = "https://api.open-meteo.com/v1/forecast?latitude=\(coordinate.latitude)&longitude=\(coordinate.longitude)&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_gusts_10m,is_day&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset&minutely_15=precipitation&forecast_minutely_15=24&temperature_unit=fahrenheit&wind_speed_unit=mph&timeformat=unixtime&timezone=auto&forecast_days=2"
             let result: StandbyWeather = try await Self.fetch(url)
             guard !Task.isCancelled else { return }
             weather = result; weatherUpdated = Date(); weatherError = false
