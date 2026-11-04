@@ -35,6 +35,17 @@ import CoreLocation
         assert(Set(electric.map(\.id)) == Set(["empty station", "regular station"]), "Zero-e-bike stations stay visible; parked regular bikes do not")
         let panned = StandbyBike.inViewport(markers, center: .init(latitude: 37.8, longitude: -122.3945), latitudeSpan: 0.005, longitudeSpan: 0.005, electricOnly: false)
         assert(panned.map(\.id) == ["outside map"], "Panning must load the new area's pins")
+        let nearest = StandbyBike.nearestAvailable(markers, center: southPark, electricOnly: false)
+        assert(nearest.first?.id == "parked regular")
+        assert(!nearest.contains { $0.id == "empty station" }, "An empty station must not set the initial camera radius")
+        let busyArea = (0..<5000).reversed().map { index in
+            bike("busy-\(index)", lat: southPark.latitude + Double(index) * 0.00001, total: 1, electric: 1, docks: 10)
+        }
+        let busyViewport = StandbyBike.inViewport(busyArea, center: southPark, latitudeSpan: 0.2, longitudeSpan: 0.2, electricOnly: false)
+        assert(busyViewport.count == 120, "A large feed must keep the marker cap")
+        assert(busyViewport.map(\.id) == (0..<120).map { "busy-\($0)" }, "Select the closest markers even when the feed arrives farthest-first")
+        let nearestBusy = StandbyBike.nearestAvailable(busyArea, center: southPark, electricOnly: true)
+        assert(nearestBusy.map(\.id) == (0..<6).map { "busy-\($0)" })
         // Optional live payloads verify the provider schemas as well as our deterministic cases.
         if CommandLine.arguments.count > 1 {
             let directory = CommandLine.arguments[1]

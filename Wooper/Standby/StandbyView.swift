@@ -20,28 +20,31 @@ struct StandbyView: View {
     @State private var priorBrightness: CGFloat?
     @State private var electricOnly = false
     @State private var selectedBikeID: String?
-    @State private var camera: MapCameraPosition = .automatic
+    @State private var camera: MapCameraPosition
     @State private var mapRegion: MKCoordinateRegion?
     @State private var centeredLocation: String?
     private let cream = Color(red: 0.965, green: 0.952, blue: 0.922)
     private let ink = Color(red: 0.17, green: 0.18, blue: 0.16)
     private let muted = Color(red: 0.36, green: 0.37, blue: 0.33)
 
-    private var paper: Paper? { data.papers.first { $0.id == paperID } }
-    private var nearby: [StandbyBike] {
-        Array(data.bikes.filter {
-            (electricOnly ? $0.electric : $0.total) > 0 && $0.distance(from: data.coordinate) < 5000
-        }.sorted { $0.distance(from: data.coordinate) < $1.distance(from: data.coordinate) }.prefix(6))
+    init(stacked: Bool, trigger: StandbyTrigger, data: StandbyData, dismiss: @escaping () -> Void) {
+        self.stacked = stacked
+        self.trigger = trigger
+        self.data = data
+        self.dismiss = dismiss
+        // Viewport-dependent pins must not drive an automatic camera: each
+        // changed pin set would reframe the map and select another pin set.
+        let region = MKCoordinateRegion(center: data.coordinate, latitudinalMeters: 1600, longitudinalMeters: 1600)
+        _camera = State(initialValue: .region(region))
+        _mapRegion = State(initialValue: region)
     }
+
+    private var paper: Paper? { data.papers.first { $0.id == paperID } }
     private var mapBikes: [StandbyBike] {
         let region = mapRegion ?? MKCoordinateRegion(center: data.coordinate, latitudinalMeters: 1600, longitudinalMeters: 1600)
         return StandbyBike.inViewport(data.bikes, center: region.center,
             latitudeSpan: region.span.latitudeDelta, longitudeSpan: region.span.longitudeDelta,
             electricOnly: electricOnly)
-    }
-    private var selected: StandbyBike? {
-        mapBikes.first { $0.id == selectedBikeID } ??
-        mapBikes.first { (electricOnly ? $0.electric : $0.total) > 0 } ?? mapBikes.first
     }
     private var night: Bool { let hour = Calendar.current.component(.hour, from: now); return hour >= 22 || hour < 6 }
 
@@ -297,7 +300,13 @@ struct StandbyView: View {
     }
 
     private func bikePanel(mapHeight: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        // Compute one snapshot for this render. Annotation closures used to
+        // filter and sort the entire feed twice for every individual marker.
+        let visibleBikes = mapBikes
+        let selected = visibleBikes.first { $0.id == selectedBikeID } ??
+            visibleBikes.first { (electricOnly ? $0.electric : $0.total) > 0 } ?? visibleBikes.first
+        let highlightedID = selected?.id
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(data.location == nil ? "bay wheels / sf" : "bay wheels / nearby").tracking(0.3)
                 Spacer(minLength: 2)
@@ -320,7 +329,7 @@ struct StandbyView: View {
                             .overlay(Circle().stroke(.white, lineWidth: 2))
                     }
                 }
-                ForEach(mapBikes) { bike in
+                ForEach(visibleBikes) { bike in
                     Annotation(bike.name, coordinate: bike.coordinate) {
                         Button {
                             selectedBikeID = bike.id
@@ -330,8 +339,8 @@ struct StandbyView: View {
                                 Text("\(electricOnly ? bike.electric : bike.total)").font(.system(size: 12, weight: .medium, design: .monospaced))
                             }
                             .padding(7)
-                            .background(selected?.id == bike.id ? ink : cream, in: Capsule())
-                            .foregroundStyle(selected?.id == bike.id ? cream : ink)
+                            .background(highlightedID == bike.id ? ink : cream, in: Capsule())
+                            .foregroundStyle(highlightedID == bike.id ? cream : ink)
                             .overlay(Capsule().stroke(ink.opacity(0.25), lineWidth: 0.5))
                             .opacity(now.timeIntervalSince(bike.reported) > 300 ? 0.5 : (electricOnly ? bike.electric : bike.total) == 0 ? 0.65 : 1)
                         }
@@ -438,10 +447,13 @@ struct StandbyView: View {
     }
     private func centerMapIfNeeded() {
         guard centeredLocation != data.locationKey else { return }
-        if !nearby.isEmpty { centeredLocation = data.locationKey }
         let coordinate = data.coordinate
+        let nearby = StandbyBike.nearestAvailable(data.bikes, center: coordinate, electricOnly: electricOnly)
+        if !nearby.isEmpty { centeredLocation = data.locationKey }
         let radius = max(400, (nearby.last?.distance(from: coordinate) ?? 700) * 1.3)
-        camera = .region(MKCoordinateRegion(center: coordinate, latitudinalMeters: radius * 2, longitudinalMeters: radius * 2))
+        let region = MKCoordinateRegion(center: coordinate, latitudinalMeters: radius * 2, longitudinalMeters: radius * 2)
+        mapRegion = region
+        camera = .region(region)
     }
     private func updateBattery() {
         battery = UIDevice.current.batteryLevel

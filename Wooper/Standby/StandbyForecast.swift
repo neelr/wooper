@@ -151,11 +151,28 @@ extension StandbyBike {
     static func inViewport(_ bikes: [StandbyBike], center: CLLocationCoordinate2D,
                            latitudeSpan: Double, longitudeSpan: Double,
                            electricOnly: Bool) -> [StandbyBike] {
-        Array(bikes.filter { bike in
+        let candidates = bikes.filter { bike in
             guard bike.isStation || (electricOnly ? bike.electric : bike.total) > 0 else { return false }
             let longitudeDistance = abs(bike.coordinate.longitude - center.longitude).truncatingRemainder(dividingBy: 360)
             return abs(bike.coordinate.latitude - center.latitude) <= latitudeSpan / 2 &&
                 min(longitudeDistance, 360 - longitudeDistance) <= longitudeSpan / 2
-        }.sorted { $0.distance(from: center) < $1.distance(from: center) }.prefix(120))
+        }
+        return ranked(candidates, center: center).prefix(120).map(\.bike)
+    }
+
+    static func nearestAvailable(_ bikes: [StandbyBike], center: CLLocationCoordinate2D,
+                                 electricOnly: Bool) -> [StandbyBike] {
+        let candidates = bikes.filter { (electricOnly ? $0.electric : $0.total) > 0 }
+        return ranked(candidates, center: center).prefix { $0.distance < 5000 }.prefix(6).map(\.bike)
+    }
+
+    private static func ranked(_ bikes: [StandbyBike], center: CLLocationCoordinate2D) -> [(bike: StandbyBike, distance: Double)] {
+        let origin = CLLocation(latitude: center.latitude, longitude: center.longitude)
+        // Core Location distance evaluation allocates objects. Do it once per
+        // candidate, not repeatedly inside the sorting comparator.
+        return bikes.map { bike in
+            let location = CLLocation(latitude: bike.coordinate.latitude, longitude: bike.coordinate.longitude)
+            return (bike: bike, distance: location.distance(from: origin))
+        }.sorted { $0.distance < $1.distance }
     }
 }
