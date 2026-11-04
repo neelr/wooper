@@ -135,9 +135,13 @@ struct StandbyView: View {
                 }
             } else {
                 clockFace(compact: false)
+                Spacer(minLength: 8)
                 weatherPanel
-                Rectangle().fill(muted.opacity(0.2)).frame(height: 0.5)
-                contextPanel
+                Spacer(minLength: 8)
+                VStack(alignment: .leading, spacing: 16) {
+                    Rectangle().fill(muted.opacity(0.2)).frame(height: 0.5)
+                    contextPanel
+                }
             }
             Spacer(minLength: 0)
             HStack(spacing: 10) {
@@ -316,10 +320,20 @@ struct StandbyView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Open \(paper.displayTitle)")
                 .id(paper.id).transition(.opacity)
-                HStack {
-                    Text((URL(string: paper.url)?.host ?? paper.site ?? "saved link").replacingOccurrences(of: "www.", with: ""))
-                        .lineLimit(1)
-                    Spacer()
+                HStack(alignment: .center, spacing: 12) {
+                    Button {
+                        if let url = URL(string: paper.url) { dismiss(); openURL(url) }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(paper.displayTitle)
+                                .font(.system(size: 18, weight: .medium, design: .monospaced))
+                                .foregroundStyle(ink).lineLimit(2)
+                                .multilineTextAlignment(.leading)
+                            Text((URL(string: paper.url)?.host ?? paper.site ?? "saved link").replacingOccurrences(of: "www.", with: ""))
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .lineLimit(1)
+                        }.frame(maxWidth: .infinity, alignment: .leading)
+                    }.buttonStyle(.plain)
                     Button { advancePaper() } label: {
                         Image(systemName: "arrow.right").frame(width: 32, height: 24)
                     }.accessibilityLabel("Next bookmark")
