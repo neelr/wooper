@@ -2,7 +2,7 @@ import SwiftUI
 import ImageIO
 import UIKit
 
-/// Row thumbnail for a paper: the /api/thumb page screenshot, fetched with the
+/// YouTube previews use random video stills; other pages use /api/thumb, fetched with the
 /// Bearer header (AsyncImage can't), downsampled to cell size, and memory-
 /// cached so scrolling doesn't refetch. Server thumbs are durable in D1, so
 /// saved papers resolve fast; HTTP-level caching also applies (max-age 7d).
@@ -13,25 +13,32 @@ struct PaperThumb: View {
     var alignment: Alignment = .center
     @Environment(\.displayScale) private var displayScale
 
-    private var cacheKey: String { "\(url)|\(Int(max(width, height) * displayScale))" }
+    private var video: YouTubeVideo? { YouTubeVideo(url) }
+    private var cacheKey: String { "\(url)|\(Int(max(width, height) * displayScale))|\(video == nil ? 0 : frameSample)" }
 
-    private static let cache = NSCache<NSString, UIImage>()
+    private static let cache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.totalCostLimit = 32 * 1024 * 1024
+        cache.countLimit = 100
+        return cache
+    }()
 
     @State private var image: UIImage?
     @State private var failed = false
+    @State private var frameSample = Double.random(in: 0..<1)
 
     var body: some View {
         Group {
             if let image {
                 Image(uiImage: image)
                     .resizable()
-                    .aspectRatio(contentMode: .fill)
+                    .aspectRatio(contentMode: video == nil ? .fill : .fit)
             } else {
                 Rectangle()
                     .fill(Color.paperyMeta.opacity(failed ? 0.06 : 0.14))
             }
         }
-        .frame(width: width, height: height, alignment: alignment)
+        .frame(width: width, height: height, alignment: video == nil ? alignment : .center)
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .overlay(
             RoundedRectangle(cornerRadius: 6)
@@ -41,12 +48,21 @@ struct PaperThumb: View {
     }
 
     private func load() async {
+        let key = cacheKey
         image = nil
         failed = false
-        if let cached = Self.cache.object(forKey: cacheKey as NSString) {
+        if let cached = Self.cache.object(forKey: key as NSString) {
             image = cached
             return
         }
+        if let video, let frame = await YouTubePreview.shared.image(for: video, sample: frameSample) {
+            guard !Task.isCancelled else { return }
+            let img = UIImage(cgImage: frame)
+            Self.cache.setObject(img, forKey: key as NSString, cost: frame.bytesPerRow * frame.height)
+            image = img
+            return
+        }
+        guard !Task.isCancelled else { return }
         guard let req = try? PaperyService.thumbRequest(for: url) else {
             failed = true
             return
@@ -60,9 +76,11 @@ struct PaperThumb: View {
                 return
             }
             guard !Task.isCancelled else { return }
-            Self.cache.setObject(img, forKey: cacheKey as NSString)
+            Self.cache.setObject(img, forKey: key as NSString,
+                                 cost: (img.cgImage?.bytesPerRow ?? 0) * (img.cgImage?.height ?? 0))
             image = img
         } catch {
+            guard !Task.isCancelled else { return }
             failed = true
         }
     }
