@@ -10,7 +10,9 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
     private let page = UIView()
     let webView = WKWebView(frame: .zero)
     let canvas = WebInkCanvas()
+    let palmRejection = PalmRejectionGesture(target: nil, action: nil)
     private lazy var pencilScroll = PencilScrollGesture(target: self, action: #selector(scrollWithPencil(_:)))
+    private lazy var pencilHover = PencilHoverGesture(target: self, action: #selector(pencilHovered(_:)))
     private var observations: [NSKeyValueObservation] = []
     private var saveTask: Task<Void, Never>?
     private var activeURL: URL?
@@ -25,7 +27,6 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
     private var scrollOrigin = CGPoint.zero
     private var scrollGrabPoint = CGPoint.zero
     private var pencilIsScrolling = false
-    private var scrollingEnabledBeforeInk = true
     private var strokeBeforeEdit: PKDrawing?
     private var strokeStartOffset = CGPoint.zero
     private var strokeZoom: CGFloat = 1
@@ -77,6 +78,10 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
         canvas.showsVerticalScrollIndicator = false
         canvas.showsHorizontalScrollIndicator = false
         canvas.drawingGestureRecognizer.isEnabled = false
+        palmRejection.onChange = { [weak self] in self?.updateScrolling() }
+        page.addGestureRecognizer(palmRejection)
+        pencilHover.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.pencil.rawValue)]
+        page.addGestureRecognizer(pencilHover)
         page.addGestureRecognizer(pencilScroll)
         #if DEBUG
         let input = BrowserInputObserver()
@@ -93,7 +98,8 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
                 "enabled": self.canvas.drawingGestureRecognizer.isEnabled,
                 "drawingState": self.strokeBeforeEdit == nil ? 0 : 1,
                 "holdState": self.pencilScroll.state.rawValue,
-                "strokes": self.canvas.drawing.strokes.count
+                "strokes": self.canvas.drawing.strokes.count,
+                "palmRejection": self.palmRejection.blocksScrolling
             ]
             self.inputEvents.append(row)
             self.inputEvents = Array(self.inputEvents.suffix(12))
@@ -146,7 +152,6 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
         // Cancel an in-flight gesture when the Duo changes screens.
         pencilScroll.isEnabled = false
         pencilScroll.isEnabled = available
-        webView.scrollView.isScrollEnabled = true
         updateCanvasVisibility()
         view.setNeedsLayout()
     }
@@ -171,7 +176,23 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
             appliedFingerInk = session.drawsWithFinger
         }
         canvas.drawingGestureRecognizer.isEnabled = false
-        webView.scrollView.panGestureRecognizer.isEnabled = strokeBeforeEdit == nil && !(session.drawsWithFinger && !canvas.isHidden)
+        updateScrolling()
+    }
+
+    private func updateScrolling() {
+        let scroll = webView.scrollView
+        let palmBlocked = !canvas.isHidden && palmRejection.blocksScrolling
+        let enabled = strokeBeforeEdit == nil && !palmBlocked
+        if !enabled && scroll.isScrollEnabled {
+            // Stop a finger flick already in motion when the Pencil arrives.
+            scroll.setContentOffset(scroll.contentOffset, animated: false)
+        }
+        scroll.isScrollEnabled = enabled
+        scroll.panGestureRecognizer.isEnabled = enabled && !(session.drawsWithFinger && !canvas.isHidden)
+    }
+
+    @objc private func pencilHovered(_ gesture: UIHoverGestureRecognizer) {
+        palmRejection.setPencilHovering(gesture.state == .began || gesture.state == .changed)
     }
 
     private func syncCanvas() {
@@ -190,7 +211,10 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
         let showInk = allowsAnnotations && ready && !annotationLoadFailed && activeURL != nil
         canvas.isHidden = !showInk
         pencilScroll.isEnabled = showInk
-        webView.scrollView.panGestureRecognizer.isEnabled = !(session.drawsWithFinger && showInk)
+        palmRejection.isEnabled = showInk
+        pencilHover.isEnabled = showInk
+        if !showInk { palmRejection.clearTracking() }
+        updateScrolling()
         syncCanvas()
     }
 
@@ -208,7 +232,6 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
                 canvas.drawing = original
                 restoring = false
                 strokeBeforeEdit = nil
-                webView.scrollView.isScrollEnabled = scrollingEnabledBeforeInk
                 updateTool()
             }
             pencilIsScrolling = true
@@ -236,8 +259,7 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
             strokeStartOffset = webView.scrollView.contentOffset
             strokeZoom = max(0.01, webView.scrollView.zoomScale)
             eraseSampleCount = 0
-            scrollingEnabledBeforeInk = webView.scrollView.isScrollEnabled
-            webView.scrollView.isScrollEnabled = false
+            updateScrolling()
         }
         guard let original = strokeBeforeEdit else { return }
         func documentPoint(_ sample: WebPencilSample) -> CGPoint {
@@ -277,7 +299,6 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
         restoring = false
         if gesture.state == .ended || gesture.state == .cancelled {
             strokeBeforeEdit = nil
-            webView.scrollView.isScrollEnabled = scrollingEnabledBeforeInk
             updateTool()
             if canvas.drawing != original {
                 canvas.undoManager?.registerUndo(withTarget: self) { target in target.replaceDrawing(original) }
@@ -331,15 +352,6 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
             session.message = "Saved annotations couldn’t be opened. The original file is unchanged."
         }
         canvas.undoManager?.removeAllActions()
-    }
-
-    func canvasViewDidBeginUsingTool(_ canvasView: PKCanvasView) {
-        scrollingEnabledBeforeInk = webView.scrollView.isScrollEnabled
-        webView.scrollView.isScrollEnabled = false
-    }
-
-    func canvasViewDidEndUsingTool(_ canvasView: PKCanvasView) {
-        webView.scrollView.isScrollEnabled = scrollingEnabledBeforeInk
     }
 
     func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {

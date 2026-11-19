@@ -4,7 +4,7 @@ repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
 test_dir="$(mktemp -d /tmp/wooper-browser-tests.XXXXXX)"
 trap 'rm -rf "$test_dir"' EXIT
 cd "$repo_dir"
-swiftc Wooper/Browser/WebAnnotationStore.swift tests/WebAnnotationTests.swift -o "$test_dir/policy-tests"
+swiftc Wooper/Browser/WebAnnotationStore.swift Wooper/Browser/PencilPalmRejection.swift tests/WebAnnotationTests.swift -o "$test_dir/policy-tests"
 "$test_dir/policy-tests"
 # A small host avoids linking the device-only DS core into a simulator build.
 mkdir -p "$test_dir/App"

@@ -102,4 +102,39 @@ import WebKit
         XCTAssertFalse(reopened.webView.scrollView.panGestureRecognizer.isEnabled,
                        "Optional finger ink must use hold-to-scroll instead of competing with native pan")
     }
+
+    func testPalmProtectionBlocksNativeScrollButKeepsPencilScrollAndCompactMode() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let session = BrowserSession(url: url)
+        let controller = WebBrowserController(session: session, allowsAnnotations: true,
+                                              store: WebAnnotationStore(directory: folder))
+        try await loaded(controller, session: session)
+        let scroll = controller.webView.scrollView
+        XCTAssertTrue(scroll.panGestureRecognizer.isEnabled)
+        XCTAssertFalse(controller.palmRejection.requiresExclusiveTouchType,
+                       "The observer must see a resting hand and Pencil together")
+        controller.palmRejection.setPencilHovering(true)
+        XCTAssertFalse(scroll.isScrollEnabled)
+        XCTAssertFalse(scroll.panGestureRecognizer.isEnabled)
+        session.ink = .highlighter
+        controller.updateTool()
+        XCTAssertFalse(scroll.panGestureRecognizer.isEnabled, "Changing tools must not release a rejected palm")
+        // Held Pencil scrolling sets the offset directly, without native pan.
+        scroll.contentOffset = CGPoint(x: 0, y: 300)
+        XCTAssertEqual(scroll.contentOffset.y, 300, accuracy: 0.1)
+        XCTAssertEqual(controller.canvas.contentOffset.y, 300, accuracy: 0.1)
+        controller.palmRejection.setPencilHovering(false)
+        XCTAssertFalse(scroll.panGestureRecognizer.isEnabled)
+        try await Task.sleep(nanoseconds: 600_000_000)
+        XCTAssertTrue(scroll.panGestureRecognizer.isEnabled, "Scrolling returns after the Pencil leaves")
+
+        controller.palmRejection.setPencilHovering(true)
+        controller.setAnnotationsAvailable(false)
+        XCTAssertTrue(scroll.isScrollEnabled, "Small-screen browsing must never be palm-locked")
+        XCTAssertTrue(scroll.panGestureRecognizer.isEnabled)
+        XCTAssertFalse(controller.palmRejection.isEnabled)
+        controller.setAnnotationsAvailable(true)
+        XCTAssertTrue(scroll.panGestureRecognizer.isEnabled, "Folding clears old hand contacts")
+    }
 }
