@@ -7,6 +7,44 @@ import WebKit
     let url = URL(string: "https://example.com/article")!
     let fixture = "<html><head><meta name='viewport' content='width=device-width,initial-scale=1'></head><body style='margin:0'><h1>Article</h1><a href='https://example.com/next'>Next article</a><div style='height:6000px;background:linear-gradient(white,lightyellow)'>Long page</div></body></html>"
 
+    func testLightPressurePenRendersAndOldInvisibleInkIsRecovered() throws {
+        func drawing(width: CGFloat, force: CGFloat) -> PKDrawing {
+            let points = [CGPoint(x: 10, y: 20), CGPoint(x: 110, y: 20)].enumerated().map { index, point in
+                PKStrokePoint(location: point, timeOffset: Double(index) * 0.1,
+                              size: CGSize(width: width, height: width), opacity: 1,
+                              force: force, azimuth: 1, altitude: 1.1)
+            }
+            return PKDrawing(strokes: [PKStroke(ink: PKInk(.pen, color: .black),
+                                                path: PKStrokePath(controlPoints: points, creationDate: Date()))])
+        }
+        func inkPixels(_ drawing: PKDrawing) -> Int {
+            let image = drawing.image(from: CGRect(x: 0, y: 0, width: 130, height: 40), scale: 2).cgImage!
+            var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
+            bytes.withUnsafeMutableBytes { buffer in
+                let context = CGContext(data: buffer.baseAddress, width: image.width, height: image.height,
+                                        bitsPerComponent: 8, bytesPerRow: image.width * 4,
+                                        space: CGColorSpaceCreateDeviceRGB(),
+                                        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+            }
+            return stride(from: 3, to: bytes.count, by: 4).filter { bytes[$0] > 16 }.count
+        }
+        for force: CGFloat in [0, 0.1, 1] {
+            let pen = drawing(width: WebPenStyle.width(force: force, maximumForce: 4.166), force: force)
+            XCTAssertGreaterThan(inkPixels(pen), 150, "Light or estimated pressure must still produce visible ink")
+        }
+        let old = drawing(width: 1.2, force: 1)
+        let recovered = WebPenStyle.recoveringLegacyInk(in: old)
+        XCTAssertGreaterThan(inkPixels(recovered), 150)
+        XCTAssertEqual(recovered.strokes[0].path[0].location, old.strokes[0].path[0].location)
+        XCTAssertEqual(recovered.strokes.count, old.strokes.count)
+        XCTAssertEqual(WebPenStyle.recoveringLegacyInk(in: recovered), recovered, "Recovery must be idempotent")
+        var marker = old.strokes[0]
+        marker.ink = PKInk(.marker, color: .yellow)
+        let highlight = PKDrawing(strokes: [marker])
+        XCTAssertEqual(WebPenStyle.recoveringLegacyInk(in: highlight), highlight)
+    }
+
     func loaded(_ controller: WebBrowserController, session: BrowserSession) async throws {
         controller.loadViewIfNeeded()
         controller.view.frame = CGRect(x: 0, y: 0, width: 900, height: 650)

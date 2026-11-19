@@ -16,6 +16,7 @@ struct WebPencilSample {
 final class PencilScrollGesture: UIGestureRecognizer {
     private var intent = PencilScrollIntent()
     private var timer: Timer?
+    private var holdAnchor = CGPoint.zero
     private(set) var origin = CGPoint.zero
     private(set) var position = CGPoint.zero
     private(set) var samples: [WebPencilSample] = []
@@ -34,9 +35,15 @@ final class PencilScrollGesture: UIGestureRecognizer {
         collect(touch)
         origin = position
         intent.begin(at: origin, time: touch.timestamp)
+        scheduleHold()
+    }
+
+    private func scheduleHold() {
+        timer?.invalidate()
+        holdAnchor = position
         let timer = Timer(timeInterval: PencilScrollIntent.holdDuration, repeats: false) { [weak self] _ in
-            guard let self, self.state == .possible else { return }
-            if self.intent.hold() == .scroll { self.state = .began }
+            guard let self, self.state == .possible || self.state == .began || self.state == .changed else { return }
+            if self.intent.hold() == .scroll { self.state = self.state == .possible ? .began : .changed }
         }
         self.timer = timer
         RunLoop.main.add(timer, forMode: .common)
@@ -44,11 +51,16 @@ final class PencilScrollGesture: UIGestureRecognizer {
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
         guard let touch = touches.first else { return }
-        for sample in event.coalescedTouches(for: touch) ?? [touch] { collect(sample) }
+        for sample in event.coalescedTouches(for: touch) ?? [touch] {
+            collect(sample)
+            _ = intent.move(to: position, time: sample.timestamp)
+        }
+        if !intent.canBecomeScroll { timer?.invalidate() }
+        else if hypot(position.x - holdAnchor.x, position.y - holdAnchor.y) > 2 { scheduleHold() }
         if state == .began || state == .changed { state = .changed; return }
         guard state == .possible else { return }
-        if intent.move(to: position, time: touch.timestamp) != .waiting {
-            timer?.invalidate()
+        if intent.mode != .waiting {
+            if intent.mode == .scroll { timer?.invalidate() }
             state = .began
         }
     }

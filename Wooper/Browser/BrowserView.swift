@@ -80,7 +80,7 @@ struct BrowserView: View {
                             if allowsAnnotations {
                                 Toggle("Draw with finger", isOn: $session.drawsWithFinger)
                                 Toggle("Red ink", isOn: $session.redInk)
-                                Text("Quick Pencil strokes draw. Hold the tip still briefly, then drag to scroll.")
+                                Text("Draw to annotate. Hold to scroll; tiny initial marks disappear.")
                             }
                         } label: { Image(systemName: "ellipsis.circle") }
                         .accessibilityLabel("Browser options")

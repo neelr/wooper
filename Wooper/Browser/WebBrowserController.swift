@@ -23,6 +23,8 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
     private var savedDrawing = PKDrawing()
     private var annotationLoadFailed = false
     private var scrollOrigin = CGPoint.zero
+    private var scrollGrabPoint = CGPoint.zero
+    private var pencilIsScrolling = false
     private var scrollingEnabledBeforeInk = true
     private var strokeBeforeEdit: PKDrawing?
     private var strokeStartOffset = CGPoint.zero
@@ -194,20 +196,35 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
 
     @objc private func scrollWithPencil(_ gesture: PencilScrollGesture) {
         if !gesture.isScrolling {
+            pencilIsScrolling = false
             drawWithPencil(gesture)
             return
         }
-        switch gesture.state {
-        case .began:
+        if !pencilIsScrolling {
+            // The early mark was only a preview. A hold converts the same
+            // contact to scrolling, restoring the drawing before that contact.
+            if let original = strokeBeforeEdit {
+                restoring = true
+                canvas.drawing = original
+                restoring = false
+                strokeBeforeEdit = nil
+                webView.scrollView.isScrollEnabled = scrollingEnabledBeforeInk
+                updateTool()
+            }
+            pencilIsScrolling = true
             scrollOrigin = webView.scrollView.contentOffset
+            scrollGrabPoint = gesture.position
             UISelectionFeedbackGenerator().selectionChanged()
+        }
+        switch gesture.state {
         case .changed:
             let scroll = webView.scrollView
             let maxX = max(0, scroll.contentSize.width - scroll.bounds.width)
             let maxY = max(0, scroll.contentSize.height - scroll.bounds.height)
             scroll.contentOffset = CGPoint(
-                x: min(maxX, max(0, scrollOrigin.x + gesture.origin.x - gesture.position.x)),
-                y: min(maxY, max(0, scrollOrigin.y + gesture.origin.y - gesture.position.y)))
+                x: min(maxX, max(0, scrollOrigin.x + scrollGrabPoint.x - gesture.position.x)),
+                y: min(maxY, max(0, scrollOrigin.y + scrollGrabPoint.y - gesture.position.y)))
+        case .ended, .cancelled: pencilIsScrolling = false
         default: break
         }
     }
@@ -245,8 +262,7 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
             let firstTime = gesture.samples[0].timestamp
             let marker = session.ink == .highlighter
             let points = gesture.samples.map { sample -> PKStrokePoint in
-                let pressure = sample.maximumForce > 0 ? min(1.4, max(0.45, sample.force / sample.maximumForce * 2)) : 1
-                let width: CGFloat = marker ? 18 : 2.5 * pressure
+                let width: CGFloat = marker ? 18 : WebPenStyle.width(force: sample.force, maximumForce: sample.maximumForce)
                 return PKStrokePoint(location: documentPoint(sample), timeOffset: max(0, sample.timestamp - firstTime),
                                      size: CGSize(width: width, height: width), opacity: 1,
                                      force: sample.force, azimuth: sample.azimuth, altitude: sample.altitude)
@@ -262,6 +278,7 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
         if gesture.state == .ended || gesture.state == .cancelled {
             strokeBeforeEdit = nil
             webView.scrollView.isScrollEnabled = scrollingEnabledBeforeInk
+            updateTool()
             if canvas.drawing != original {
                 canvas.undoManager?.registerUndo(withTarget: self) { target in target.replaceDrawing(original) }
                 canvasViewDrawingDidChange(canvas)
@@ -304,7 +321,7 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
         session.saveStatus = ""
         do {
             if let saved = try store.load(url) {
-                canvas.drawing = try PKDrawing(data: saved.drawing)
+                canvas.drawing = WebPenStyle.recoveringLegacyInk(in: try PKDrawing(data: saved.drawing))
                 annotationWidth = saved.pageWidth
                 session.saveStatus = canvas.drawing.strokes.isEmpty ? "" : "saved on this device"
             }
@@ -344,14 +361,15 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
         guard !annotationLoadFailed, !restoring, let url = activeURL else { return true }
         // PencilKit's delegate can arrive after a toolbar tap or scene change.
         // Compare the model too, so that last stroke is included immediately.
-        if canvas.drawing != savedDrawing { dirty = true }
+        let committedDrawing = strokeBeforeEdit ?? canvas.drawing
+        if committedDrawing != savedDrawing { dirty = true }
         guard dirty else { return true }
         guard let width = annotationWidth else { return false }
         do {
             let record = WebAnnotationRecord(url: WebAnnotationStore.documentKey(url), pageWidth: width,
-                                             drawing: canvas.drawing.dataRepresentation())
+                                             drawing: committedDrawing.dataRepresentation())
             try store.save(record, for: url)
-            savedDrawing = canvas.drawing
+            savedDrawing = committedDrawing
             dirty = false
             session.saveStatus = "saved on this device"
             return true

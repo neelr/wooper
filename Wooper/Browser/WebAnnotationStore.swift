@@ -59,33 +59,39 @@ struct WebAnnotationStore {
     }
 }
 
-/// Movement commits a contact to ink; a stationary hold commits it to scrolling.
-/// Once chosen, the intent cannot change until the Pencil leaves the screen.
+/// Small marks remain provisional: pausing can turn them into a scroll.
+/// Larger handwriting stays ink even if the writer pauses partway through.
 struct PencilScrollIntent {
     enum Mode: Equatable { case waiting, ink, scroll }
     private(set) var mode: Mode = .waiting
     private(set) var startTime: TimeInterval = 0
     private(set) var startPoint = CGPoint.zero
+    private(set) var maximumDistance: CGFloat = 0
     static let holdDuration: TimeInterval = 0.3
     static let movementThreshold: CGFloat = 5
+    static let provisionalRadius: CGFloat = 24
+    var canBecomeScroll: Bool { mode != .scroll && maximumDistance <= Self.provisionalRadius }
 
     mutating func begin(at point: CGPoint, time: TimeInterval) {
         startPoint = point
         startTime = time
         mode = .waiting
+        maximumDistance = 0
     }
 
     mutating func move(to point: CGPoint, time: TimeInterval) -> Mode {
-        guard mode == .waiting else { return mode }
+        guard mode != .scroll else { return mode }
         // Movement before the hold wins, even when a coalesced event is delivered late.
         let distance = hypot(point.x - startPoint.x, point.y - startPoint.y)
+        maximumDistance = max(maximumDistance, distance)
+        guard mode == .waiting else { return mode }
         if distance > Self.movementThreshold { mode = .ink }
         else if time - startTime >= Self.holdDuration { mode = .scroll }
         return mode
     }
 
     mutating func hold() -> Mode {
-        if mode == .waiting { mode = .scroll }
+        if canBecomeScroll { mode = .scroll }
         return mode
     }
 }

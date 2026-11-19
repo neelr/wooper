@@ -4,9 +4,11 @@ HTTP(S) links opened through the app's `openURL` environment or delivered from a
 
 Annotations and their controls appear only with regular horizontal and vertical size classes, including the Duo's expanded screen. The outside screen remains an ordinary responsive browser. On expansion, the page returns to the saved annotation width and restores the ink.
 
-The toolbar offers pen, highlighter, stroke eraser, and undo/redo, with PencilKit rendering the ink. Quick Pencil movement draws. Holding the tip within five points for 0.3 seconds claims the whole contact for scrolling, without leaving ink. A pause during an existing stroke does not switch modes. Fingers normally interact with the website, including scrolling, links, and forms. “Draw with finger” is an optional browser menu setting; it uses the same quick-stroke/hold distinction.
+The toolbar offers pen, highlighter, stroke eraser, and undo/redo, with PencilKit rendering the ink. Quick Pencil movement draws. Holding the tip still for 0.3 seconds starts scrolling. A small initial mark within 24 points of the contact's start is provisional: holding removes it and switches to scrolling without a jump or an undo step. Larger handwriting stays ink when paused. Fingers normally interact with the website, including scrolling, links, and forms. “Draw with finger” is an optional browser menu setting; it uses the same quick-stroke/hold distinction.
 
 The Duo supplies Pencil touch types after the initial hit test. A typed gesture recognizer on the common parent therefore captures coalesced Pencil positions, pressure, and tilt, and renders them as PencilKit strokes. The ink canvas never blocks website hit testing. Erasing removes intersected strokes; each completed contact is one undo step. The drawing preview follows input immediately and is saved when the stroke finishes.
+
+Pen footprints have a three-point minimum so light pressure remains visible in PencilKit. Previously saved thinner pen marks are repaired when loaded, preserving their positions and leaving highlighter strokes unchanged. Provisional strokes are excluded from autosave until committed.
 
 The transparent canvas follows the web scroll view's offset, content size, and zoom scale. Drawings stay in document coordinates. Each annotated URL retains its original expanded layout width; the expanded viewport scales this layout rather than reflowing it. This is a live browser, not an archived copy: a publisher changing content, an inserted ad, or other dynamic layout changes can still move content relative to existing ink.
 
