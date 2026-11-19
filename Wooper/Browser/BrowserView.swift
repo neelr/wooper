@@ -61,11 +61,6 @@ struct BrowserView: View {
             .modifier(FloatingBrowserGlass(shape: Circle()))
             .padding(12)
         }
-        .overlay(alignment: .bottomTrailing) {
-            if !allowsAnnotations {
-                browserOptions.modifier(FloatingBrowserGlass(shape: Circle())).padding(12)
-            }
-        }
         .overlay(alignment: .bottom) {
             if session.loading { ProgressView().padding(10).background(.regularMaterial, in: Capsule()).padding(8) }
         }
@@ -107,8 +102,6 @@ struct BrowserView: View {
             inkButton(.pen, symbol: "pencil.tip")
             inkButton(.highlighter, symbol: "highlighter")
             inkButton(.eraser, symbol: "eraser")
-            Divider().frame(height: 26).padding(.horizontal, 2)
-            browserOptions
         }
         .padding(6)
         .modifier(FloatingBrowserGlass(shape: Capsule()))
@@ -119,26 +112,6 @@ struct BrowserView: View {
         .accessibilityValue("Undo \(session.canUndo ? "available" : "unavailable"), redo \(session.canRedo ? "available" : "unavailable")")
         .accessibilityAction(named: "Undo annotation") { session.controller?.undoInk() }
         .accessibilityAction(named: "Redo annotation") { session.controller?.redoInk() }
-    }
-
-    private var browserOptions: some View {
-        Menu {
-            Button("Reload page", systemImage: "arrow.clockwise") { session.controller?.reload() }
-            ShareLink(item: session.url)
-            if allowsAnnotations {
-                Toggle("Draw with finger", isOn: $session.drawsWithFinger)
-                Toggle("Red ink", isOn: $session.redInk)
-                Text("Hold the Pencil still to switch scrolling and drawing. The mode stays selected after you lift.")
-                Text("Two-finger tap to undo. Three-finger tap to redo.")
-            }
-        } label: {
-            Image(systemName: "ellipsis")
-                .font(.system(size: 20, weight: .medium))
-                .frame(width: 52, height: 52)
-                .contentShape(Rectangle())
-        }
-        .modifier(BrowserMenuPressStyle())
-        .accessibilityLabel("Browser options")
     }
 
     private func inkButton(_ ink: BrowserSession.Ink, symbol: String) -> some View {
@@ -158,16 +131,6 @@ struct BrowserView: View {
         if selected {
             Circle().fill(Color.paperyHlBg.opacity(0.25))
                 .matchedGeometryEffect(id: "selected-tool", in: toolSelection)
-        }
-    }
-}
-
-private struct BrowserMenuPressStyle: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content.buttonStyle(.glass).buttonBorderShape(.circle)
-        } else {
-            content.buttonStyle(.bordered).buttonBorderShape(.capsule)
         }
     }
 }
