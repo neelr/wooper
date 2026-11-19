@@ -31,7 +31,10 @@ final class PencilScrollGesture: UIGestureRecognizer {
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
-        guard numberOfTouches <= 1, let touch = touches.first else { state = .failed; return }
+        guard numberOfTouches <= 1, let touch = touches.first else {
+            state = state == .began || state == .changed ? .cancelled : .failed
+            return
+        }
         collect(touch)
         origin = position
         intent.begin(at: origin, time: touch.timestamp)

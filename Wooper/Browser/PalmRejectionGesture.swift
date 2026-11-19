@@ -6,6 +6,7 @@ final class PalmRejectionGesture: UIGestureRecognizer {
     private var policy = PencilPalmRejection<ObjectIdentifier>()
     private var releaseTimer: Timer?
     private(set) var blocksScrolling = false
+    var hasPencilContact: Bool { policy.hasPencilContact }
     var onChange: (() -> Void)?
 
     override init(target: Any?, action: Selector?) {

@@ -4,7 +4,7 @@ import WebKit
 
 /// The live web page and ink share document coordinates, scrolling, and zoom.
 /// Only the viewport is rendered by PencilKit, including on very long articles.
-final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDelegate, PKCanvasViewDelegate {
+final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDelegate, PKCanvasViewDelegate, UIGestureRecognizerDelegate {
     private let session: BrowserSession
     private let store: WebAnnotationStore
     private let page = UIView()
@@ -13,6 +13,8 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
     let palmRejection = PalmRejectionGesture(target: nil, action: nil)
     private lazy var pencilScroll = PencilScrollGesture(target: self, action: #selector(scrollWithPencil(_:)))
     private lazy var pencilHover = PencilHoverGesture(target: self, action: #selector(pencilHovered(_:)))
+    private lazy var undoTap = UITapGestureRecognizer(target: self, action: #selector(historyTapped(_:)))
+    private lazy var redoTap = UITapGestureRecognizer(target: self, action: #selector(historyTapped(_:)))
     private var observations: [NSKeyValueObservation] = []
     private var saveTask: Task<Void, Never>?
     private var activeURL: URL?
@@ -47,6 +49,10 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override var editingInteractionConfiguration: UIEditingInteractionConfiguration {
+        allowsAnnotations ? .none : .default
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -83,6 +89,14 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
         pencilHover.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.pencil.rawValue)]
         page.addGestureRecognizer(pencilHover)
         page.addGestureRecognizer(pencilScroll)
+        undoTap.numberOfTouchesRequired = 2
+        redoTap.numberOfTouchesRequired = 3
+        undoTap.require(toFail: redoTap)
+        for tap in [undoTap, redoTap] {
+            tap.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
+            tap.delegate = self
+            page.addGestureRecognizer(tap)
+        }
         #if DEBUG
         let input = BrowserInputObserver()
         input.cancelsTouchesInView = false
@@ -213,9 +227,29 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
         pencilScroll.isEnabled = showInk
         palmRejection.isEnabled = showInk
         pencilHover.isEnabled = showInk
+        undoTap.isEnabled = showInk
+        redoTap.isEnabled = showInk
         if !showInk { palmRejection.clearTracking() }
         updateScrolling()
         syncCanvas()
+    }
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        !canvas.isHidden && strokeBeforeEdit == nil && !palmRejection.hasPencilContact
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        // Multi-finger history taps take priority over the page's tap actions;
+        // drags and pinches still win when fingers move instead of tapping.
+        otherGestureRecognizer !== undoTap && otherGestureRecognizer !== redoTap && otherGestureRecognizer is UITapGestureRecognizer
+    }
+
+    @objc private func historyTapped(_ gesture: UITapGestureRecognizer) {
+        guard gesture.state == .ended, !canvas.isHidden, strokeBeforeEdit == nil,
+              !palmRejection.hasPencilContact else { return }
+        if gesture === undoTap { undoInk() }
+        else if gesture === redoTap { redoInk() }
     }
 
     @objc private func scrollWithPencil(_ gesture: PencilScrollGesture) {
@@ -262,6 +296,14 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
             updateScrolling()
         }
         guard let original = strokeBeforeEdit else { return }
+        if gesture.state == .cancelled {
+            restoring = true
+            canvas.drawing = original
+            restoring = false
+            strokeBeforeEdit = nil
+            updateTool()
+            return
+        }
         func documentPoint(_ sample: WebPencilSample) -> CGPoint {
             CGPoint(x: (sample.location.x + strokeStartOffset.x) / strokeZoom,
                     y: (sample.location.y + strokeStartOffset.y) / strokeZoom)

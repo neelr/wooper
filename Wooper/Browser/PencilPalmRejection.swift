@@ -10,6 +10,7 @@ struct PencilPalmRejection<Contact: Hashable> {
     private(set) var graceUntil: TimeInterval = 0
 
     var hasContacts: Bool { !pencils.isEmpty || !fingers.isEmpty }
+    var hasPencilContact: Bool { !pencils.isEmpty }
 
     func blocksScrolling(at time: TimeInterval) -> Bool {
         hovering || !pencils.isEmpty || time < graceUntil || !rejected.isEmpty
