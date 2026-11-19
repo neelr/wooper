@@ -46,8 +46,8 @@ struct BrowserView: View {
         .overlay(alignment: .topLeading) {
             if allowsAnnotations {
                 annotationTools
-                    .padding(.leading, 12)
-                    .padding(.top, 6)
+                    .padding(.leading, 16)
+                    .padding(.top, 12)
                     .ignoresSafeArea(.container, edges: .top)
             }
         }
