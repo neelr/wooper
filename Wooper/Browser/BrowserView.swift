@@ -85,13 +85,8 @@ struct BrowserView: View {
                         } label: { Image(systemName: "ellipsis.circle") }
                         .accessibilityLabel("Browser options")
                     }
-                    ToolbarItemGroup(placement: .bottomBar) {
-                        Button { session.controller?.goBack() } label: { Image(systemName: "chevron.backward") }
-                            .disabled(!session.canGoBack).accessibilityLabel("Previous page")
-                        Button { session.controller?.goForward() } label: { Image(systemName: "chevron.forward") }
-                            .disabled(!session.canGoForward).accessibilityLabel("Next page")
-                        Spacer()
-                        if allowsAnnotations {
+                    if allowsAnnotations {
+                        ToolbarItemGroup(placement: .bottomBar) {
                             inkButton(.pen, symbol: "pencil.tip")
                             inkButton(.highlighter, symbol: "highlighter")
                             inkButton(.eraser, symbol: "eraser")
