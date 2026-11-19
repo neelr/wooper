@@ -17,6 +17,7 @@ struct AppShell: View {
     @State private var standby = StandbyTrigger()
     @State private var standbyData = StandbyData()
     @State private var standbyStatusBarHidden = false
+    @State private var browser: BrowserDestination?
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var standbyClock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -69,6 +70,17 @@ struct AppShell: View {
             .animation(.easeInOut(duration: reduceMotion ? 0.2 : (standby.visible ? 0.8 : 0.65)), value: standby.visible)
         }
         .modifier(StandbyHingeObserver(trigger: standby, enabled: Self.isDuo))
+        .environment(\.openURL, OpenURLAction { url in
+            guard WebAnnotationStore.accepts(url) else { return .systemAction }
+            openBrowser(url)
+            return .handled
+        })
+        .onOpenURL { url in
+            if WebAnnotationStore.accepts(url) { openBrowser(url) }
+        }
+        .fullScreenCover(item: $browser) { destination in
+            BrowserView(url: destination.url)
+        }
         .statusBarHidden(standbyStatusBarHidden)
         .task(id: standby.visible) {
             if standby.visible {
@@ -83,7 +95,7 @@ struct AppShell: View {
         }
         .onReceive(standbyClock) { date in
             guard scenePhase == .active else { return }
-            let eligible = standbyLayout != nil && selectedTab == .papery &&
+            let eligible = browser == nil && standbyLayout != nil && selectedTab == .papery &&
                 !standby.keyboardVisible && standby.canPresent
             #if DEBUG
             standby.eligible = eligible
@@ -102,6 +114,11 @@ struct AppShell: View {
         .onChange(of: supportsDS) { _, supported in
             if !supported, selectedTab == .comics { selectedTab = .papery }
         }
+    }
+
+    private func openBrowser(_ url: URL) {
+        standby.policy.leave()
+        browser = BrowserDestination(url: url)
     }
 
     private var navigationTabs: some View {

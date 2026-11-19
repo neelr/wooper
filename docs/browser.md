@@ -1,0 +1,24 @@
+# In-app browser and web ink
+
+HTTP(S) links opened through the app's `openURL` environment or delivered from a widget now open a full-screen `WKWebView`. Papery, Curius, recording links, and standby bookmarks share this route. Browser presentation prevents standby from starting. A linked page or a new-window link stays in the same browser; back/forward, reload, and sharing are available.
+
+Annotations and their controls appear only with regular horizontal and vertical size classes, including the Duo's expanded screen. The outside screen remains an ordinary responsive browser. On expansion, the page returns to the saved annotation width and restores the ink.
+
+The toolbar offers pen, highlighter, stroke eraser, and undo/redo, with PencilKit rendering the ink. Quick Pencil movement draws. Holding the tip within five points for 0.3 seconds claims the whole contact for scrolling, without leaving ink. A pause during an existing stroke does not switch modes. Fingers normally interact with the website, including scrolling, links, and forms. “Draw with finger” is an optional browser menu setting; it uses the same quick-stroke/hold distinction.
+
+The Duo supplies Pencil touch types after the initial hit test. A typed gesture recognizer on the common parent therefore captures coalesced Pencil positions, pressure, and tilt, and renders them as PencilKit strokes. The ink canvas never blocks website hit testing. Erasing removes intersected strokes; each completed contact is one undo step. The drawing preview follows input immediately and is saved when the stroke finishes.
+
+The transparent canvas follows the web scroll view's offset, content size, and zoom scale. Drawings stay in document coordinates. Each annotated URL retains its original expanded layout width; the expanded viewport scales this layout rather than reflowing it. This is a live browser, not an archived copy: a publisher changing content, an inserted ad, or other dynamic layout changes can still move content relative to existing ink.
+
+Ink autosaves after changes and flushes before navigation, closing, folding, and backgrounding. Local files live in Application Support/WebAnnotations with SHA-256 filenames, atomic writes, and versioned records containing the document URL, width, PencilKit drawing, and update date. Ordinary URL fragments share a drawing; query strings and hash-router paths remain distinct. Save failures are visible and prevent ordinary navigation/closing from discarding the drawing. Failed reads leave the original file intact. Annotations are device-local, with no new server or credential use.
+
+Core checks:
+
+```sh
+swiftc Wooper/Browser/WebAnnotationStore.swift tests/WebAnnotationTests.swift -o /tmp/wooper-web-annotation-tests
+/tmp/wooper-web-annotation-tests
+```
+
+`scripts/test-web-browser.sh` also builds a small simulator host from the production browser sources and checks first-page loading, saved ink reopening, document-coordinate scrolling, compact visibility, restored expanded width, and finger passthrough. It defaults to the iPad Pro 13-inch (M5) simulator; set `BROWSER_TEST_DESTINATION` to use another installed simulator.
+
+Device checks: open an article from Papery and Curius, make a quick Pencil stroke, hold and drag to scroll, tap a website link with a finger, go back, close/reopen the browser, and relaunch the app. Fold to the outside display and confirm the ink and tools disappear; expand again and confirm alignment. Confirm standby stays off while reading. Actual Pencil timing and Duo transitions need physical-device verification.
