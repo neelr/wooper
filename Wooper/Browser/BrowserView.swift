@@ -55,7 +55,9 @@ struct BrowserView: View {
             Button {
                 if session.controller?.saveNow() != false { dismiss() }
             } label: {
-                Image(systemName: "chevron.left").frame(width: 44, height: 44)
+                Image(systemName: "chevron.left")
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .accessibilityLabel("Back to Papery")
             .modifier(FloatingBrowserGlass(shape: Circle()))
