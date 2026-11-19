@@ -89,6 +89,7 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
         pencilHover.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.pencil.rawValue)]
         page.addGestureRecognizer(pencilHover)
         page.addGestureRecognizer(pencilScroll)
+        pencilScroll.onModeChange = { [weak self] mode in self?.switchPencilMode(to: mode) }
         undoTap.numberOfTouchesRequired = 2
         redoTap.numberOfTouchesRequired = 3
         undoTap.require(toFail: redoTap)
@@ -172,6 +173,7 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
 
     func updateTool() {
         guard isViewLoaded else { return }
+        pencilScroll.startingMode = session.pencilMode == .scroll ? .scroll : .ink
         if appliedInk != session.ink || appliedRedInk != session.redInk {
             switch session.ink {
             case .pen:
@@ -253,6 +255,10 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
     }
 
     @objc private func scrollWithPencil(_ gesture: PencilScrollGesture) {
+        guard !gesture.awaitingMovementAfterToggle else {
+            pencilIsScrolling = false
+            return
+        }
         if !gesture.isScrolling {
             pencilIsScrolling = false
             drawWithPencil(gesture)
@@ -270,20 +276,33 @@ final class WebBrowserController: UIViewController, WKNavigationDelegate, WKUIDe
             }
             pencilIsScrolling = true
             scrollOrigin = webView.scrollView.contentOffset
-            scrollGrabPoint = gesture.position
-            UISelectionFeedbackGenerator().selectionChanged()
+            scrollGrabPoint = gesture.origin
         }
         switch gesture.state {
-        case .changed:
+        case .began, .changed, .ended:
             let scroll = webView.scrollView
             let maxX = max(0, scroll.contentSize.width - scroll.bounds.width)
             let maxY = max(0, scroll.contentSize.height - scroll.bounds.height)
             scroll.contentOffset = CGPoint(
                 x: min(maxX, max(0, scrollOrigin.x + scrollGrabPoint.x - gesture.position.x)),
                 y: min(maxY, max(0, scrollOrigin.y + scrollGrabPoint.y - gesture.position.y)))
-        case .ended, .cancelled: pencilIsScrolling = false
+            if gesture.state == .ended { pencilIsScrolling = false }
+        case .cancelled: pencilIsScrolling = false
         default: break
         }
+    }
+
+    private func switchPencilMode(to mode: PencilScrollIntent.Mode) {
+        if let original = strokeBeforeEdit {
+            restoring = true
+            canvas.drawing = original
+            restoring = false
+            strokeBeforeEdit = nil
+        }
+        pencilIsScrolling = false
+        session.pencilMode = mode == .scroll ? .scroll : .draw
+        updateTool()
+        UISelectionFeedbackGenerator().selectionChanged()
     }
 
     private func drawWithPencil(_ gesture: PencilScrollGesture) {

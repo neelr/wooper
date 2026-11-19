@@ -9,6 +9,7 @@ struct BrowserDestination: Identifiable {
 @MainActor @Observable
 final class BrowserSession {
     enum Ink: String, CaseIterable { case pen, highlighter, eraser }
+    enum PencilMode { case scroll, draw }
     let initialURL: URL
     var url: URL
     var title = ""
@@ -20,6 +21,7 @@ final class BrowserSession {
     var message: String?
     var saveStatus = ""
     var ink: Ink = .pen
+    var pencilMode: PencilMode = .scroll
     var redInk = false
     var drawsWithFinger = false
     @ObservationIgnored weak var controller: WebBrowserController?
@@ -33,6 +35,7 @@ struct BrowserView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var session: BrowserSession
+    @Namespace private var toolSelection
     private var allowsAnnotations: Bool { horizontalSizeClass == .regular && verticalSizeClass == .regular }
 
     init(url: URL) { _session = State(initialValue: BrowserSession(url: url)) }
@@ -40,8 +43,13 @@ struct BrowserView: View {
     var body: some View {
         BrowserSurface(session: session, allowsAnnotations: allowsAnnotations)
         .background(Color.paperyBg)
-        .overlay(alignment: .leading) {
-            if allowsAnnotations { annotationTools.padding(.leading, 12) }
+        .overlay(alignment: .topLeading) {
+            if allowsAnnotations {
+                annotationTools
+                    .padding(.leading, 12)
+                    .padding(.top, 6)
+                    .ignoresSafeArea(.container, edges: .top)
+            }
         }
         .overlay(alignment: .bottomLeading) {
             Button {
@@ -58,7 +66,7 @@ struct BrowserView: View {
                 browserOptions.modifier(FloatingBrowserGlass(shape: Circle())).padding(12)
             }
         }
-        .overlay(alignment: .top) {
+        .overlay(alignment: .bottom) {
             if session.loading { ProgressView().padding(10).background(.regularMaterial, in: Capsule()).padding(8) }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -75,6 +83,7 @@ struct BrowserView: View {
         .tint(Color.paperyInk)
         .preferredColorScheme(.light)
         .onChange(of: session.ink) { _, _ in session.controller?.updateTool() }
+        .onChange(of: session.pencilMode) { _, _ in session.controller?.updateTool() }
         .onChange(of: session.redInk) { _, _ in session.controller?.updateTool() }
         .onChange(of: session.drawsWithFinger) { _, _ in session.controller?.updateTool() }
         .onChange(of: scenePhase) { _, phase in
@@ -84,15 +93,27 @@ struct BrowserView: View {
     }
 
     private var annotationTools: some View {
-        VStack(spacing: 4) {
+        HStack(spacing: 4) {
+            Button { session.pencilMode = .scroll } label: {
+                Image(systemName: "hand.draw")
+                    .foregroundStyle(session.pencilMode == .scroll ? Color.paperyInk : Color.paperyMeta)
+                    .font(.system(size: 20))
+                    .frame(width: 44, height: 44)
+                    .background { selectionCircle(session.pencilMode == .scroll) }
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Scroll with Pencil")
+            .accessibilityAddTraits(session.pencilMode == .scroll ? .isSelected : [])
             inkButton(.pen, symbol: "pencil.tip")
             inkButton(.highlighter, symbol: "highlighter")
             inkButton(.eraser, symbol: "eraser")
-            Divider().frame(width: 26).padding(.vertical, 2)
+            Divider().frame(height: 26).padding(.horizontal, 2)
             browserOptions
         }
         .padding(6)
-        .modifier(FloatingBrowserGlass(shape: RoundedRectangle(cornerRadius: 26)))
+        .modifier(FloatingBrowserGlass(shape: Capsule()))
+        .animation(.spring(response: 0.28, dampingFraction: 0.8), value: session.pencilMode)
+        .animation(.spring(response: 0.28, dampingFraction: 0.8), value: session.ink)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Annotation tools")
         .accessibilityValue("Undo \(session.canUndo ? "available" : "unavailable"), redo \(session.canRedo ? "available" : "unavailable")")
@@ -107,23 +128,47 @@ struct BrowserView: View {
             if allowsAnnotations {
                 Toggle("Draw with finger", isOn: $session.drawsWithFinger)
                 Toggle("Red ink", isOn: $session.redInk)
-                Text("Draw to annotate. Hold to scroll; tiny initial marks disappear.")
+                Text("Hold the Pencil still to switch scrolling and drawing. The mode stays selected after you lift.")
                 Text("Two-finger tap to undo. Three-finger tap to redo.")
             }
-        } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44) }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 20, weight: .medium))
+                .frame(width: 52, height: 52)
+                .contentShape(Rectangle())
+        }
+        .modifier(BrowserMenuPressStyle())
         .accessibilityLabel("Browser options")
     }
 
     private func inkButton(_ ink: BrowserSession.Ink, symbol: String) -> some View {
-        Button { session.ink = ink } label: {
+        Button { session.ink = ink; session.pencilMode = .draw } label: {
             Image(systemName: symbol)
-                .foregroundStyle(session.ink == ink ? Color.paperyInk : Color.paperyMeta)
+                .foregroundStyle(session.pencilMode == .draw && session.ink == ink ? Color.paperyInk : Color.paperyMeta)
                 .font(.system(size: 20))
                 .frame(width: 44, height: 44)
-                .background(session.ink == ink ? Color.paperyHlBg.opacity(0.25) : .clear, in: Circle())
+                .background { selectionCircle(session.pencilMode == .draw && session.ink == ink) }
+                .contentShape(Rectangle())
         }
         .accessibilityLabel(ink.rawValue.capitalized)
-        .accessibilityAddTraits(session.ink == ink ? .isSelected : [])
+        .accessibilityAddTraits(session.pencilMode == .draw && session.ink == ink ? .isSelected : [])
+    }
+
+    @ViewBuilder private func selectionCircle(_ selected: Bool) -> some View {
+        if selected {
+            Circle().fill(Color.paperyHlBg.opacity(0.25))
+                .matchedGeometryEffect(id: "selected-tool", in: toolSelection)
+        }
+    }
+}
+
+private struct BrowserMenuPressStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.buttonStyle(.glass).buttonBorderShape(.circle)
+        } else {
+            content.buttonStyle(.bordered).buttonBorderShape(.capsule)
+        }
     }
 }
 

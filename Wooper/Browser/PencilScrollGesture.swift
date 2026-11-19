@@ -20,6 +20,9 @@ final class PencilScrollGesture: UIGestureRecognizer {
     private(set) var origin = CGPoint.zero
     private(set) var position = CGPoint.zero
     private(set) var samples: [WebPencilSample] = []
+    var startingMode: PencilScrollIntent.Mode = .scroll
+    var onModeChange: ((PencilScrollIntent.Mode) -> Void)?
+    private(set) var awaitingMovementAfterToggle = false
     var isScrolling: Bool { intent.mode == .scroll }
 
     private func collect(_ touch: UITouch) {
@@ -37,7 +40,7 @@ final class PencilScrollGesture: UIGestureRecognizer {
         }
         collect(touch)
         origin = position
-        intent.begin(at: origin, time: touch.timestamp)
+        intent.begin(at: origin, mode: startingMode)
         scheduleHold()
     }
 
@@ -46,7 +49,14 @@ final class PencilScrollGesture: UIGestureRecognizer {
         holdAnchor = position
         let timer = Timer(timeInterval: PencilScrollIntent.holdDuration, repeats: false) { [weak self] _ in
             guard let self, self.state == .possible || self.state == .began || self.state == .changed else { return }
-            if self.intent.hold() == .scroll { self.state = self.state == .possible ? .began : .changed }
+            guard self.intent.toggleOnHold() else { return }
+            // The hold itself never leaves a dot or jumps the page. Movement
+            // after the haptic begins a fresh stroke/drag at the held point.
+            self.origin = self.position
+            self.samples = self.samples.last.map { [$0] } ?? []
+            self.awaitingMovementAfterToggle = true
+            self.onModeChange?(self.intent.mode)
+            self.state = self.state == .possible ? .began : .changed
         }
         self.timer = timer
         RunLoop.main.add(timer, forMode: .common)
@@ -56,23 +66,26 @@ final class PencilScrollGesture: UIGestureRecognizer {
         guard let touch = touches.first else { return }
         for sample in event.coalescedTouches(for: touch) ?? [touch] {
             collect(sample)
-            _ = intent.move(to: position, time: sample.timestamp)
+            intent.move(to: position)
         }
-        if !intent.canBecomeScroll { timer?.invalidate() }
+        if !intent.canToggle { timer?.invalidate() }
         else if hypot(position.x - holdAnchor.x, position.y - holdAnchor.y) > 2 { scheduleHold() }
+        let distance = hypot(position.x - origin.x, position.y - origin.y)
+        if awaitingMovementAfterToggle {
+            guard distance > PencilScrollIntent.movementThreshold else { return }
+            awaitingMovementAfterToggle = false
+        }
         if state == .began || state == .changed { state = .changed; return }
         guard state == .possible else { return }
-        if intent.mode != .waiting {
-            if intent.mode == .scroll { timer?.invalidate() }
-            state = .began
-        }
+        if distance > PencilScrollIntent.movementThreshold { state = .began }
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
         timer?.invalidate()
         if let touch = touches.first { collect(touch) }
-        // A short stationary tap is an ink dot; a held contact stays scrolling.
-        state = .ended
+        // A short tap in scroll mode reaches website links. A mode-toggle hold
+        // is consumed even without subsequent movement, but leaves no ink.
+        state = state == .possible && isScrolling && !intent.didToggle ? .failed : .ended
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
@@ -84,6 +97,7 @@ final class PencilScrollGesture: UIGestureRecognizer {
         timer?.invalidate()
         timer = nil
         samples.removeAll(keepingCapacity: true)
+        awaitingMovementAfterToggle = false
         intent = PencilScrollIntent()
         super.reset()
     }

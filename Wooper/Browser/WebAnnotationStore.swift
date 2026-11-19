@@ -59,39 +59,39 @@ struct WebAnnotationStore {
     }
 }
 
-/// Small marks remain provisional: pausing can turn them into a scroll.
-/// Larger handwriting stays ink even if the writer pauses partway through.
+/// A contact starts in the selected mode. A stationary hold switches it once;
+/// the browser carries the new mode into later contacts.
 struct PencilScrollIntent {
-    enum Mode: Equatable { case waiting, ink, scroll }
-    private(set) var mode: Mode = .waiting
-    private(set) var startTime: TimeInterval = 0
+    enum Mode: Equatable { case ink, scroll }
+    private(set) var mode: Mode = .scroll
+    private(set) var initialMode: Mode = .scroll
     private(set) var startPoint = CGPoint.zero
     private(set) var maximumDistance: CGFloat = 0
+    private(set) var didToggle = false
     static let holdDuration: TimeInterval = 0.3
     static let movementThreshold: CGFloat = 5
     static let provisionalRadius: CGFloat = 24
-    var canBecomeScroll: Bool { mode != .scroll && maximumDistance <= Self.provisionalRadius }
-
-    mutating func begin(at point: CGPoint, time: TimeInterval) {
-        startPoint = point
-        startTime = time
-        mode = .waiting
-        maximumDistance = 0
+    var canToggle: Bool {
+        !didToggle && maximumDistance <= (initialMode == .ink ? Self.provisionalRadius : Self.movementThreshold)
     }
 
-    mutating func move(to point: CGPoint, time: TimeInterval) -> Mode {
-        guard mode != .scroll else { return mode }
-        // Movement before the hold wins, even when a coalesced event is delivered late.
+    mutating func begin(at point: CGPoint, mode: Mode) {
+        startPoint = point
+        self.mode = mode
+        initialMode = mode
+        maximumDistance = 0
+        didToggle = false
+    }
+
+    mutating func move(to point: CGPoint) {
         let distance = hypot(point.x - startPoint.x, point.y - startPoint.y)
         maximumDistance = max(maximumDistance, distance)
-        guard mode == .waiting else { return mode }
-        if distance > Self.movementThreshold { mode = .ink }
-        else if time - startTime >= Self.holdDuration { mode = .scroll }
-        return mode
     }
 
-    mutating func hold() -> Mode {
-        if canBecomeScroll { mode = .scroll }
-        return mode
+    @discardableResult mutating func toggleOnHold() -> Bool {
+        guard canToggle else { return false }
+        mode = mode == .scroll ? .ink : .scroll
+        didToggle = true
+        return true
     }
 }
